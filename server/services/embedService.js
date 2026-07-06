@@ -7,3 +7,11 @@ exports.getEmbeddings = async (text) => {
   const result = await model.embedContent(text);
   return result.embedding.values; // Returns the float array
 };
+
+//For RAG
+exports.generateAnswer = async (prompt) => {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text();
+};
