@@ -1,71 +1,128 @@
 # Contributing to SupplyLens
 
-Thank you for your interest in contributing to SupplyLens!
+First off, thank you for considering contributing to **SupplyLens**! 🎉
 
-We welcome contributions that improve functionality, fix bugs, enhance documentation, or introduce new features aligned with our mission of intelligent supplier risk management.
+SupplyLens is an AI-powered Supplier Risk Intelligence Platform designed to help small and medium-sized businesses (SMBs) proactively identify, analyze, and mitigate supplier risks through intelligent automation, explainable AI, and predictive analytics.
+
+Whether you're fixing bugs, improving documentation, adding features, or optimizing performance, every contribution is appreciated.
 
 ---
 
 # Table of Contents
 
-- Code of Conduct
+- Project Vision
+- Development Roadmap
+- Version Roadmap
 - Getting Started
 - Development Setup
 - Project Structure
-- Branch Naming
+- Branch Naming Convention
 - Commit Guidelines
-- Pull Request Process
 - Coding Standards
+- Pull Requests
 - Reporting Bugs
-- Suggesting Features
+- Feature Requests
 - Documentation
+- Code of Conduct
 - License
 
 ---
 
-# Code of Conduct
+# Project Vision
 
-Be respectful and professional.
+SupplyLens aims to become more than a supplier management application.
 
-We expect contributors to:
+The long-term vision is to build an **AI-powered Digital Twin Platform** for supplier intelligence.
 
-- Be respectful during discussions.
-- Write clean and maintainable code.
-- Provide constructive feedback.
-- Help maintain a welcoming environment.
+Instead of simply storing supplier information, SupplyLens continuously learns from:
+
+- Supplier documents
+- Contracts
+- News articles
+- ESG reports
+- Delivery history
+- Financial information
+- Geopolitical events
+- Logistics disruptions
+
+and combines these signals into a continuously evolving Digital Twin capable of:
+
+- Risk prediction
+- Explainable AI
+- Supplier recommendations
+- Scenario simulation
+- Intelligent decision support
+
+---
+
+# Development Roadmap
+
+| Phase | Goal | Key Features | Deliverables |
+|------|------|--------------|--------------|
+| **Phase 1 – Foundation** | Build the core supplier management platform | Authentication, Supplier CRUD, Dashboard, MongoDB integration | Functional MERN application |
+| **Phase 2 – Intelligent Data Layer** | Make uploaded documents searchable | PDF parsing, chunking, embeddings, MongoDB Atlas Search, RAG chatbot | AI-powered supplier knowledge retrieval |
+| **Phase 3 – Supplier Intelligence** | Gather external supplier intelligence | News aggregation, sentiment analysis, company enrichment | Live supplier news feed with sentiment trends |
+| **Phase 4 – Digital Twin Engine** ⭐ | Create a dynamic supplier representation | Merge documents, contracts, ESG, logistics, news, and historical data | Live supplier Digital Twin |
+| **Phase 5 – Explainable Risk Scoring** | Improve transparency | Weighted risk model, confidence scores, factor attribution | Explainable supplier risk dashboard |
+| **Phase 6 – Predictive Analytics** | Forecast supplier performance | Time-series forecasting, anomaly detection, early warnings | Predictive risk insights |
+| **Phase 7 – Scenario Simulator** | Support business decisions | "What-if" analysis, supplier failure simulation, alternate supplier recommendations | AI-powered decision support |
+| **Phase 8 – Multi-Agent Intelligence** | Specialized AI assistants | Risk, Finance, ESG, Legal, Logistics, and Manager agents | Coordinated AI analysis |
+| **Phase 9 – Supply Chain Visualization** | Visualize supplier relationships | Interactive graph, dependency mapping, global supplier map | Digital Twin visualization |
+| **Phase 10 – Enterprise Readiness** | Prepare for production | CI/CD, Docker, testing, monitoring, RBAC, documentation | Production-ready SaaS platform |
+
+---
+
+# Version Roadmap
+
+| Version | Milestone |
+|----------|-----------|
+| **v0.1** | Authentication & Supplier Management |
+| **v0.2** | Document Upload & AI Chat (RAG) |
+| **v0.3** | News Intelligence & Sentiment Analysis |
+| **v0.4** | Supplier Digital Twin Engine |
+| **v0.5** | Explainable Risk Scoring |
+| **v0.6** | Predictive Analytics |
+| **v0.7** | Scenario Simulator |
+| **v0.8** | Multi-Agent AI |
+| **v0.9** | Supply Chain Graph Visualization |
+| **v1.0** | Enterprise Release |
 
 ---
 
 # Getting Started
 
-## 1. Fork the repository
+## Fork the Repository
 
-Click **Fork** on GitHub.
+Click the **Fork** button on GitHub.
 
-## 2. Clone your fork
+Clone your fork.
 
 ```bash
 git clone https://github.com/<your-username>/SupplyLens.git
 cd SupplyLens
 ```
 
-## 3. Install dependencies
+---
 
-Frontend
+## Install Dependencies
+
+### Client
 
 ```bash
 cd client
 npm install
 ```
 
-Backend
+### Server
 
 ```bash
 cd ../server
 npm install
 ```
 
-## 4. Configure environment variables
+---
+
+## Configure Environment Variables
 
 Create
 
@@ -75,19 +132,19 @@ server/.env
 
 Example
 
-```
+```env
 PORT=5000
 
-MONGO_URI=your_mongodb_connection
+MONGO_URI=your_mongodb_connection_string
 
-JWT_SECRET=your_secret
+JWT_SECRET=your_jwt_secret
 
-GOOGLE_API_KEY=your_api_key
+GOOGLE_API_KEY=your_google_api_key
 ```
 
 ---
 
-# Running the project
+## Start Development Server
 
 Backend
 
@@ -109,37 +166,49 @@ npm run dev
 SupplyLens/
 
 client/
-    src/
-    public/
+│
+├── src/
+├── public/
+└── package.json
 
 server/
-    controllers/
-    routes/
-    middleware/
-    models/
-    services/
-    utils/
+│
+├── controllers/
+├── middleware/
+├── models/
+├── routes/
+├── services/
+├── utils/
+├── uploads/
+└── package.json
 
 README.md
+
 CONTRIBUTING.md
 ```
 
 ---
 
-# Branch Naming
+# Branch Naming Convention
 
-Use descriptive branch names.
+Please use descriptive branch names.
 
 Examples
 
 ```
-feature/sentiment-analysis
+feature/rag-chatbot
 
-feature/risk-dashboard
+feature/digital-twin
 
-bugfix/login-error
+feature/scenario-simulator
 
-docs/readme-update
+feature/multi-agent-ai
+
+feature/supplier-graph
+
+bugfix/login-validation
+
+docs/update-readme
 
 refactor/auth-service
 ```
@@ -148,81 +217,82 @@ refactor/auth-service
 
 # Commit Guidelines
 
-Use Conventional Commits.
+SupplyLens follows the **Conventional Commits** specification.
 
 Examples
 
 ```
-feat: add supplier similarity search
+feat: add supplier digital twin engine
 
-fix: resolve JWT authentication issue
+feat: implement RAG chatbot
 
-docs: improve README
+feat: integrate supplier sentiment analysis
 
-refactor: optimize sentiment service
+fix: resolve JWT authentication bug
 
-test: add supplier API tests
+refactor: simplify supplier controller
+
+docs: improve installation guide
+
+test: add supplier API integration tests
 ```
 
 ---
 
 # Coding Standards
 
-## JavaScript
+## Frontend
 
-- Use ES6+
-- Prefer const over let where possible.
-- Avoid unnecessary nesting.
-- Use async/await instead of promise chains.
+- Use React functional components.
+- Prefer Hooks over class components.
+- Create reusable UI components.
+- Use descriptive variable names.
+- Avoid duplicated logic.
 
-## React
-
-- Functional components
-- Hooks
-- Reusable components
-- Avoid duplicated UI
+---
 
 ## Backend
 
-- Separate controllers, routes, and services.
-- Validate all inputs.
+- Follow RESTful API principles.
+- Validate all incoming requests.
+- Use async/await.
+- Separate business logic into services.
 - Return meaningful HTTP status codes.
 
 ---
 
-# Pull Request Process
+## General
 
-Before submitting a PR:
+- Write readable code.
+- Keep functions small.
+- Use meaningful commit messages.
+- Remove unused imports.
+- Document complex logic.
 
-- Sync with the latest main branch.
-- Ensure the project builds successfully.
-- Test your changes.
-- Update documentation if needed.
-- Keep pull requests focused on a single feature or fix.
+---
 
-PR template:
+# Pull Request Guidelines
 
-### Description
+Before submitting a Pull Request:
 
-Explain what changed.
+- Sync your branch with the latest `main`
+- Ensure the project builds successfully
+- Test your changes
+- Update documentation if necessary
+- Keep each PR focused on a single feature or bug fix
 
-### Motivation
+PR Description should include:
 
-Why was this change needed?
-
-### Testing
-
-Describe how you tested it.
-
-### Screenshots
-
-If applicable.
+- Summary
+- Motivation
+- Testing
+- Screenshots (if applicable)
 
 ---
 
 # Reporting Bugs
 
-Please include:
+When reporting bugs, include:
 
 - Operating System
 - Browser
@@ -230,38 +300,62 @@ Please include:
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
-- Screenshots if available
+- Screenshots (if available)
 
 ---
 
 # Feature Requests
 
-Include:
+Feature requests should include:
 
 - Problem statement
 - Proposed solution
 - Alternative approaches
 - Additional context
 
+We especially welcome ideas related to:
+
+- AI
+- Supply Chain Analytics
+- Digital Twins
+- Predictive Analytics
+- Explainable AI
+- Multi-Agent Systems
+- Supply Chain Visualization
+
 ---
 
 # Documentation
 
-Good documentation is as valuable as code.
+Documentation improvements are always welcome.
 
-Contributions improving:
+Examples include:
 
-- README
+- README updates
 - API documentation
-- Setup instructions
 - Architecture diagrams
+- Deployment guides
+- Tutorials
+- Code comments
 
-are always appreciated.
+---
+
+# Code of Conduct
+
+Please be respectful, collaborative, and constructive.
+
+We strive to maintain an inclusive and welcoming environment for everyone.
 
 ---
 
 # License
 
-By contributing, you agree that your contributions will be licensed under the project's MIT License.
+By contributing to SupplyLens, you agree that your contributions will be licensed under the project's MIT License.
 
-Thank you for helping improve SupplyLens!
+---
+
+## Thank You ❤️
+
+Every contribution—whether it's fixing a typo, improving documentation, or implementing a major feature—helps make SupplyLens a better platform for intelligent supplier risk management.
+
+Happy coding! 🚀
