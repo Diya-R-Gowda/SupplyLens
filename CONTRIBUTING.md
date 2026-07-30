@@ -71,6 +71,157 @@ and combines these signals into a continuously evolving Digital Twin capable of:
 | **Phase 10 – Enterprise Readiness** | Prepare for production | CI/CD, Docker, testing, monitoring, RBAC, documentation | Production-ready SaaS platform |
 
 ---
+# 🚀 Project Roadmap
+
+---
+
+# Remaining Work — Phase 1 (Foundation)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Authentication | Implement JWT authentication, bcrypt password hashing, refresh tokens, protected routes, and role-based access control. |
+| 🟢 | Supplier CRUD | Complete supplier creation, editing, deletion, searching, filtering, pagination, and validation. |
+| 🟢 | Dashboard | Build responsive dashboard with KPIs, supplier statistics, charts, and recent activity. |
+| 🟢 | Database Design | Finalize MongoDB schemas, indexes, validation, and relationships between collections. |
+| 🟢 | REST API | Implement RESTful endpoints for authentication and supplier management. |
+| 🟢 | Error Handling | Add centralized error middleware and standardized API responses. |
+| 🟢 | UI Components | Build reusable React components and responsive layouts using Tailwind CSS. |
+| 🟢 | API Documentation | Document all backend endpoints using Swagger/OpenAPI. |
+
+---
+
+# Remaining Work — Phase 2 (Intelligent Data Layer)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | PDF Upload Pipeline | Support secure upload and storage of supplier documents. |
+| 🟢 | PDF Parsing | Extract text and metadata from uploaded supplier documents. |
+| 🟢 | Document Chunking | Split documents into embedding-ready chunks for semantic search. |
+| 🟢 | Embedding Generation | Generate vector embeddings using Gemini Embedding models. |
+| 🟢 | MongoDB Atlas Search | Store embeddings in Atlas Vector Search for efficient retrieval. |
+| 🟢 | RAG Chatbot | Build Retrieval-Augmented Generation chatbot using supplier documents. |
+| 🟢 | Conversation Memory | Maintain contextual conversations across user interactions. |
+
+---
+
+# Remaining Work — Phase 3 (Supplier Intelligence)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | News Aggregation | Integrate NewsAPI, RSS feeds, or GDELT for supplier monitoring. |
+| 🟢 | Sentiment Analysis | Analyze supplier-related news using AI/NLP models. |
+| 🟢 | Company Enrichment | Automatically collect supplier industry, location, and business metadata. |
+| 🟢 | Supplier Timeline | Maintain chronological history of supplier events and activities. |
+| 🟢 | Live Risk Updates | Automatically update supplier risk when new intelligence becomes available. |
+
+---
+
+# Remaining Work — Phase 4 (Supplier Digital Twin)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Digital Twin Engine | Combine internal and external supplier information into a continuously evolving supplier profile. |
+| 🟢 | Unified Supplier Model | Merge contracts, documents, news, ESG, logistics, and operational data. |
+| 🟢 | Supplier Health Score | Continuously calculate supplier health based on multiple data sources. |
+| 🟢 | Historical Snapshots | Track supplier state over time for comparison and auditing. |
+| 🟢 | Twin Synchronization | Keep Digital Twin updated whenever new supplier information is received. |
+
+---
+
+# Remaining Work — Phase 5 (Explainable Risk Scoring)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Risk Scoring Engine | Calculate weighted supplier risk scores using configurable factors. |
+| 🟢 | Explainable AI | Explain why supplier risk changed and identify contributing factors. |
+| 🟢 | Confidence Scores | Display confidence levels for every AI-generated recommendation. |
+| 🟢 | Risk History | Maintain historical supplier risk trends and visualizations. |
+| 🟢 | Alert Thresholds | Trigger alerts when configurable risk limits are exceeded. |
+
+---
+
+# Remaining Work — Phase 6 (Predictive Analytics)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Risk Forecasting | Predict future supplier risk using historical trends. |
+| 🟢 | Anomaly Detection | Detect unusual supplier behavior and operational anomalies. |
+| 🟢 | Trend Analysis | Visualize long-term supplier performance trends. |
+| 🟢 | Early Warning System | Notify users before supplier risk becomes critical. |
+| 🟢 | Predictive Dashboard | Display future supplier health projections and confidence intervals. |
+
+---
+
+# Remaining Work — Phase 7 (Scenario Simulator)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Supplier Failure Simulation | Simulate supplier shutdowns and disruptions. |
+| 🟢 | Business Impact Analysis | Estimate operational and financial impact of supplier failures. |
+| 🟢 | Recovery Planning | Calculate estimated recovery time after disruptions. |
+| 🟢 | Alternative Supplier Recommendations | Recommend replacement suppliers based on similarity and performance. |
+| 🟢 | AI Decision Support | Generate mitigation strategies using AI recommendations. |
+
+---
+
+# Remaining Work — Phase 8 (Multi-Agent Intelligence)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Risk Analyst Agent | Evaluate operational and financial supplier risks. |
+| 🟢 | Finance Agent | Analyze payment history, invoices, and financial stability. |
+| 🟢 | Legal Agent | Review contracts, compliance clauses, and obligations. |
+| 🟢 | ESG Agent | Assess environmental, social, and governance performance. |
+| 🟢 | Logistics Agent | Monitor shipping performance and logistics disruptions. |
+| 🟢 | Manager Agent | Aggregate outputs from all AI agents into executive summaries. |
+| 🟢 | Agent Collaboration | Enable communication between specialized AI agents for coordinated decision-making. |
+
+---
+
+# Remaining Work — Phase 9 (Supply Chain Visualization)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Supply Network Graph | Build interactive supplier dependency graphs using React Flow or Cytoscape.js. |
+| 🟢 | Geographic Map | Display supplier locations and regional risk on an interactive world map. |
+| 🟢 | Relationship Explorer | Visualize supplier connections, dependencies, and critical paths. |
+| 🟢 | Timeline Visualization | Show historical supplier events and risk evolution. |
+| 🟢 | Risk Heatmaps | Highlight geographic regions with elevated supplier risk. |
+
+---
+
+# Remaining Work — Phase 10 (Enterprise Readiness)
+
+| Status | Item | Notes |
+|---------|------|-------|
+| 🟢 | Docker Support | Containerize frontend and backend services. |
+| 🟢 | CI/CD Pipelines | Automate builds, testing, and deployment using GitHub Actions. |
+| 🟢 | Automated Testing | Implement unit, integration, and end-to-end testing. |
+| 🟢 | Monitoring & Logging | Add centralized logging, health checks, and performance monitoring. |
+| 🟢 | Role-Based Access Control | Implement fine-grained authorization for enterprise users. |
+| 🟢 | Audit Logs | Record user actions and system events for traceability. |
+| 🟢 | Security Hardening | Apply OWASP best practices, input validation, rate limiting, and secure headers. |
+| 🟢 | Performance Optimization | Optimize database queries, caching, lazy loading, and API performance. |
+| 🟢 | Deployment | Deploy production-ready application using Docker, cloud infrastructure, and environment management. |
+| 🟢 | Technical Documentation | Complete developer guides, architecture documentation, deployment instructions, and API references. |
+
+---
+
+# 🎯 Target Release
+
+| Version | Milestone |
+|----------|-----------|
+| v0.1 | Authentication & Supplier Management |
+| v0.2 | Intelligent Data Layer (RAG) |
+| v0.3 | Supplier Intelligence |
+| v0.4 | Supplier Digital Twin |
+| v0.5 | Explainable Risk Scoring |
+| v0.6 | Predictive Analytics |
+| v0.7 | Scenario Simulator |
+| v0.8 | Multi-Agent Intelligence |
+| v0.9 | Supply Chain Visualization |
+| v1.0 | Enterprise Release 🚀 |
+---
 
 # Version Roadmap
 
