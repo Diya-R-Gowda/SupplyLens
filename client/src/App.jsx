@@ -1,25 +1,41 @@
 import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import api, { getAccessToken, getRefreshToken, setTokens, clearTokens, setOnAuthFailure } from './api/axios';
 
 export default function App() {
-	const [token, setToken] = useState(() => localStorage.getItem('token'));
+	const [authed, setAuthed] = useState(() => !!getAccessToken());
 
 	useEffect(() => {
-		if (token) {
-			localStorage.setItem('token', token);
-		} else {
-			localStorage.removeItem('token');
+		setOnAuthFailure(() => setAuthed(false));
+	}, []);
+
+	const handleLoginSuccess = (tokens) => {
+		setTokens(tokens);
+		setAuthed(true);
+	};
+
+	const handleLogout = async () => {
+		const refreshToken = getRefreshToken();
+		try {
+			if (refreshToken) {
+				await api.post('/auth/logout', { refreshToken });
+			}
+		} catch {
+			// best-effort revoke; still clear local state either way
+		} finally {
+			clearTokens();
+			setAuthed(false);
 		}
-	}, [token]);
+	};
 
 	return (
 		<main style={styles.page}>
 			<section style={styles.card}>
-				{token ? (
-					<Dashboard onLogout={() => setToken(null)} />
+				{authed ? (
+					<Dashboard onLogout={handleLogout} />
 				) : (
-					<Login onSuccess={setToken} />
+					<Login onSuccess={handleLoginSuccess} />
 				)}
 			</section>
 		</main>

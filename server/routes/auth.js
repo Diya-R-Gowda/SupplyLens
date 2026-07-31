@@ -1,19 +1,15 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Supplier = require('../models/Supplier');
 const Organisation = require('../models/Organisation');
-const { registerDemoUser, findDemoUser } = require('../services/demoStore');
+const { registerDemoUser, findDemoUser, getDemoUserById } = require('../services/demoStore');
+const { issueTokenPair, consumeRefreshToken, revokeRefreshToken } = require('../services/tokenService');
 
 const router = express.Router();
 
-const signToken = (user) => jwt.sign(
-	{ id: String(user._id), orgId: String(user.orgId) },
-	process.env.JWT_SECRET,
-	{ expiresIn: '7d' }
-);
+const isDemoMode = () => mongoose.connection.readyState !== 1;
 
 const seedOrgSupplier = async (orgId) => {
 	const supplierCount = await Supplier.countDocuments({ orgId });
@@ -30,6 +26,18 @@ const seedOrgSupplier = async (orgId) => {
 	}
 };
 
+const authResponse = async (res, status, user, demo) => {
+	const tokens = await issueTokenPair(user, { demo });
+	return res.status(status).json({
+		...tokens,
+		user: {
+			email: user.email,
+			role: user.role,
+			orgId: String(user.orgId),
+		},
+	});
+};
+
 router.post('/register', async (req, res) => {
 	const { email, password } = req.body;
 
@@ -38,7 +46,9 @@ router.post('/register', async (req, res) => {
 	}
 
 	try {
-		if (mongoose.connection.readyState === 1) {
+		const demo = isDemoMode();
+
+		if (!demo) {
 			const existing = await User.findOne({ email });
 			if (existing) {
 				return res.status(409).json({ msg: 'An account with this email already exists' });
@@ -57,14 +67,7 @@ router.post('/register', async (req, res) => {
 
 			await seedOrgSupplier(org._id);
 
-			return res.status(201).json({
-				token: signToken(user),
-				user: {
-					email: user.email,
-					role: user.role,
-					orgId: String(user.orgId),
-				},
-			});
+			return authResponse(res, 201, user, demo);
 		}
 
 		const demoUser = registerDemoUser(email, password);
@@ -72,14 +75,7 @@ router.post('/register', async (req, res) => {
 			return res.status(409).json({ msg: 'An account with this email already exists' });
 		}
 
-		return res.status(201).json({
-			token: signToken(demoUser),
-			user: {
-				email: demoUser.email,
-				role: demoUser.role,
-				orgId: String(demoUser.orgId),
-			},
-		});
+		return authResponse(res, 201, demoUser, demo);
 	} catch (error) {
 		console.error(error);
 		return res.status(500).send('Server Error');
@@ -94,7 +90,9 @@ router.post('/login', async (req, res) => {
 	}
 
 	try {
-		if (mongoose.connection.readyState === 1) {
+		const demo = isDemoMode();
+
+		if (!demo) {
 			const user = await User.findOne({ email });
 			if (!user) {
 				return res.status(401).json({ msg: 'Invalid credentials' });
@@ -105,14 +103,7 @@ router.post('/login', async (req, res) => {
 				return res.status(401).json({ msg: 'Invalid credentials' });
 			}
 
-			return res.json({
-				token: signToken(user),
-				user: {
-					email: user.email,
-					role: user.role,
-					orgId: String(user.orgId),
-				},
-			});
+			return authResponse(res, 200, user, demo);
 		}
 
 		const demoUser = findDemoUser(email, password);
@@ -120,14 +111,49 @@ router.post('/login', async (req, res) => {
 			return res.status(401).json({ msg: 'Invalid credentials' });
 		}
 
-		return res.json({
-			token: signToken(demoUser),
-			user: {
-				email: demoUser.email,
-				role: demoUser.role,
-				orgId: String(demoUser.orgId),
-			},
-		});
+		return authResponse(res, 200, demoUser, demo);
+	} catch (error) {
+		console.error(error);
+		return res.status(500).send('Server Error');
+	}
+});
+
+router.post('/refresh', async (req, res) => {
+	const { refreshToken } = req.body;
+
+	if (!refreshToken) {
+		return res.status(400).json({ msg: 'Refresh token is required' });
+	}
+
+	try {
+		const demo = isDemoMode();
+		const userId = await consumeRefreshToken(refreshToken, { demo });
+		if (!userId) {
+			return res.status(401).json({ msg: 'Invalid or expired refresh token', code: 'REFRESH_TOKEN_INVALID' });
+		}
+
+		const user = demo ? getDemoUserById(userId) : await User.findById(userId);
+		if (!user) {
+			return res.status(401).json({ msg: 'Invalid or expired refresh token', code: 'REFRESH_TOKEN_INVALID' });
+		}
+
+		return authResponse(res, 200, user, demo);
+	} catch (error) {
+		console.error(error);
+		return res.status(500).send('Server Error');
+	}
+});
+
+router.post('/logout', async (req, res) => {
+	const { refreshToken } = req.body;
+
+	if (!refreshToken) {
+		return res.status(400).json({ msg: 'Refresh token is required' });
+	}
+
+	try {
+		await revokeRefreshToken(refreshToken, { demo: isDemoMode() });
+		return res.json({ msg: 'Logged out' });
 	} catch (error) {
 		console.error(error);
 		return res.status(500).send('Server Error');

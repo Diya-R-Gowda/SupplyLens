@@ -17,7 +17,7 @@ export default function Login({ onSuccess }) {
 
     try {
       const response = await api.post(isRegister ? '/auth/register' : '/auth/login', { email, password });
-      onSuccess(response.data.token);
+      onSuccess(response.data);
     } catch (requestError) {
       setError(requestError?.response?.data?.msg || (isRegister ? 'Unable to create account' : 'Unable to sign in'));
     } finally {
