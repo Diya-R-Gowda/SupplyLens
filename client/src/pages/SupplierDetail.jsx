@@ -11,7 +11,7 @@ export default function SupplierDetail({ supplierId, onBack }) {
 
   useEffect(() => {
     if (!supplierId) return;
-    api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data));
+    api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
     api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data || [])).catch(() => setDocuments([]));
   }, [supplierId]);
 

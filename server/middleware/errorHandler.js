@@ -14,8 +14,12 @@ module.exports = (err, req, res, next) => { // eslint-disable-line no-unused-var
   }
 
   if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'field';
-    return sendError(res, 409, `A record with that ${field} already exists`, 'DUPLICATE_KEY', { field });
+    // For a compound unique index, every field in the key is part of what
+    // collided (e.g. {orgId,name} - naming only "orgId" would be misleading,
+    // since orgId alone is never unique) - so list all of them.
+    const fields = Object.keys(err.keyValue || err.keyPattern || {});
+    const fieldList = fields.join(', ') || 'field';
+    return sendError(res, 409, `A record with that ${fieldList} already exists`, 'DUPLICATE_KEY', { fields });
   }
 
   if (err.name === 'ValidationError') {

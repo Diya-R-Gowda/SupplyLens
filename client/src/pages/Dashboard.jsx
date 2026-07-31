@@ -16,7 +16,7 @@ export default function Dashboard({ onLogout }) {
       try {
         const response = await api.get('/suppliers');
         if (active) {
-          setSuppliers(response.data);
+          setSuppliers(response.data.data);
         }
       } catch (requestError) {
         if (active) {
