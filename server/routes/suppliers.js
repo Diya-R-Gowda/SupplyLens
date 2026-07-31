@@ -82,12 +82,26 @@ const buildNameFilter = (search) => {
   return { name: { $regex: escapeRegex(String(search)), $options: 'i' } };
 };
 
+const DEFAULT_PAGE_LIMIT = 20;
+const MAX_PAGE_LIMIT = 100;
+
+const parsePagination = (page, limit) => {
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || DEFAULT_PAGE_LIMIT, 1), MAX_PAGE_LIMIT);
+  return { page: parsedPage, limit: parsedLimit };
+};
+
+const buildPaginationMeta = (total, page, limit) => ({
+  pagination: { total, page, limit, totalPages: Math.max(Math.ceil(total / limit), 1) },
+});
+
 // The two categorical fields on the schema (models/Supplier.js) - category is
 // an enum, country is a normalized 2-letter code - are the natural exact-match
 // filters. riskScore/contractExpiry are more naturally range queries than
 // filters and aren't asked for here.
 router.get('/', auth, asyncHandler(async (req, res) => {
   const { search, category, country } = req.query;
+  const { page, limit } = parsePagination(req.query.page, req.query.limit);
 
   if (isDemoMode()) {
     let suppliers = listDemoSuppliers(req.user.orgId);
@@ -101,15 +115,23 @@ router.get('/', auth, asyncHandler(async (req, res) => {
     if (country) {
       suppliers = suppliers.filter((s) => String(s.country).toUpperCase() === String(country).toUpperCase());
     }
-    return sendSuccess(res, suppliers);
+
+    const total = suppliers.length;
+    const start = (page - 1) * limit;
+    const paged = suppliers.slice(start, start + limit);
+    return sendSuccess(res, paged, { meta: buildPaginationMeta(total, page, limit) });
   }
 
   const filter = { orgId: req.user.orgId, ...buildNameFilter(search) };
   if (category) filter.category = category;
   if (country) filter.country = String(country).toUpperCase();
 
-  const suppliers = await Supplier.find(filter);
-  return sendSuccess(res, suppliers);
+  const total = await Supplier.countDocuments(filter);
+  const suppliers = await Supplier.find(filter)
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  return sendSuccess(res, suppliers, { meta: buildPaginationMeta(total, page, limit) });
 }));
 
 // Create a supplier (admin only)
