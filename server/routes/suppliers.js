@@ -82,9 +82,12 @@ const buildNameFilter = (search) => {
   return { name: { $regex: escapeRegex(String(search)), $options: 'i' } };
 };
 
-// Get all suppliers for the organization
+// The two categorical fields on the schema (models/Supplier.js) - category is
+// an enum, country is a normalized 2-letter code - are the natural exact-match
+// filters. riskScore/contractExpiry are more naturally range queries than
+// filters and aren't asked for here.
 router.get('/', auth, asyncHandler(async (req, res) => {
-  const { search } = req.query;
+  const { search, category, country } = req.query;
 
   if (isDemoMode()) {
     let suppliers = listDemoSuppliers(req.user.orgId);
@@ -92,10 +95,19 @@ router.get('/', auth, asyncHandler(async (req, res) => {
       const needle = String(search).toLowerCase();
       suppliers = suppliers.filter((s) => s.name.toLowerCase().includes(needle));
     }
+    if (category) {
+      suppliers = suppliers.filter((s) => s.category === category);
+    }
+    if (country) {
+      suppliers = suppliers.filter((s) => String(s.country).toUpperCase() === String(country).toUpperCase());
+    }
     return sendSuccess(res, suppliers);
   }
 
   const filter = { orgId: req.user.orgId, ...buildNameFilter(search) };
+  if (category) filter.category = category;
+  if (country) filter.country = String(country).toUpperCase();
+
   const suppliers = await Supplier.find(filter);
   return sendSuccess(res, suppliers);
 }));
