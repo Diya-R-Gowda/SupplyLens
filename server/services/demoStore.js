@@ -93,6 +93,37 @@ const upsertDemoSupplier = (orgId, supplier) => {
   return nextSupplier;
 };
 
+const updateDemoSupplier = (orgId, supplierId, updates) => {
+  const orgKey = String(orgId);
+  const supplierKey = String(supplierId);
+  const currentSuppliers = demoSuppliersByOrg.get(orgKey) || [];
+  const index = currentSuppliers.findIndex((s) => String(s._id) === supplierKey);
+  if (index === -1) return null;
+
+  const updated = { ...currentSuppliers[index] };
+  for (const field of ['name', 'category', 'country', 'contractExpiry', 'paymentTerms', 'riskScore']) {
+    if (updates[field] !== undefined) updated[field] = updates[field];
+  }
+
+  currentSuppliers[index] = updated;
+  demoSuppliersByOrg.set(orgKey, currentSuppliers);
+  demoSuppliersById.set(supplierKey, updated);
+  return updated;
+};
+
+const deleteDemoSupplier = (orgId, supplierId) => {
+  const orgKey = String(orgId);
+  const supplierKey = String(supplierId);
+  const currentSuppliers = demoSuppliersByOrg.get(orgKey) || [];
+  const index = currentSuppliers.findIndex((s) => String(s._id) === supplierKey);
+  if (index === -1) return false;
+
+  currentSuppliers.splice(index, 1);
+  demoSuppliersByOrg.set(orgKey, currentSuppliers);
+  demoSuppliersById.delete(supplierKey);
+  return true;
+};
+
 const recordDemoDocument = (supplierId, fileName) => ({
   success: true,
   demo: true,
@@ -142,6 +173,8 @@ module.exports = {
   listDemoSuppliers,
   getDemoSupplier,
   upsertDemoSupplier,
+  updateDemoSupplier,
+  deleteDemoSupplier,
   recordDemoDocument,
   recordDemoUploadedDocument,
   listDemoDocuments,
