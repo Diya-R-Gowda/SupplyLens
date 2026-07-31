@@ -12,7 +12,7 @@ export default function SupplierDetail({ supplierId, onBack }) {
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
-    api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data || [])).catch(() => setDocuments([]));
+    api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data.data || [])).catch(() => setDocuments([]));
   }, [supplierId]);
 
   if (!supplier) return <p>Loading...</p>;
@@ -40,10 +40,14 @@ export default function SupplierDetail({ supplierId, onBack }) {
               setUploadStatus('Uploading...');
               const formData = new FormData();
               formData.append('file', file);
-              const response = await api.post(`/documents/upload/${supplierId}`, formData);
-              setUploadStatus(response.data?.demo ? 'Uploaded in demo mode.' : 'Document ingested and embedded!');
-              const latestDocuments = await api.get(`/documents/${supplierId}`);
-              setDocuments(latestDocuments.data || []);
+              try {
+                const response = await api.post(`/documents/upload/${supplierId}`, formData);
+                setUploadStatus(response.data.data?.demo ? 'Uploaded in demo mode.' : 'Document ingested and embedded!');
+                const latestDocuments = await api.get(`/documents/${supplierId}`);
+                setDocuments(latestDocuments.data.data || []);
+              } catch (uploadError) {
+                setUploadStatus(uploadError?.response?.data?.error?.message || 'Failed to process document.');
+              }
             }}
           />
           {uploadStatus ? <p style={styles.status}>{uploadStatus}</p> : null}
