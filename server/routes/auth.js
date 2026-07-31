@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Supplier = require('../models/Supplier');
+const Organisation = require('../models/Organisation');
 const { ensureDemoUser } = require('../services/demoStore');
 
 const router = express.Router();
@@ -31,15 +32,18 @@ router.post('/login', async (req, res) => {
 					return res.status(401).json({ msg: 'Invalid credentials' });
 				}
 			} else {
-				const orgId = new mongoose.Types.ObjectId();
+				const org = await Organisation.create({ name: `${email.split('@')[0]}'s Organisation` });
 				const hashedPassword = await bcrypt.hash(password, 10);
 				user = await User.create({
 					email,
 					password: hashedPassword,
 					role: 'admin',
-					orgId,
+					orgId: org._id,
 				});
+				org.owner = user._id;
+				await org.save();
 
+				const orgId = org._id;
 				const supplierCount = await Supplier.countDocuments({ orgId });
 				if (supplierCount === 0) {
 					await Supplier.create({
