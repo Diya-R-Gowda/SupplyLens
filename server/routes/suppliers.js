@@ -68,13 +68,35 @@ const findOrgDemoSupplier = (id, orgId) => {
   return supplier;
 };
 
+// Escape regex metacharacters so a search term is matched literally, not
+// interpreted as a pattern (avoids both wrong results and ReDoS from
+// attacker-controlled regex).
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A MongoDB text index tokenizes into whole words, so "orth" wouldn't match
+// "Northwind" - the wrong fit for a search-as-you-type box. A case-insensitive
+// regex gives real substring matching; per-org supplier counts are small
+// enough that an unanchored regex scan is fine without an index for it.
+const buildNameFilter = (search) => {
+  if (!search) return {};
+  return { name: { $regex: escapeRegex(String(search)), $options: 'i' } };
+};
+
 // Get all suppliers for the organization
 router.get('/', auth, asyncHandler(async (req, res) => {
+  const { search } = req.query;
+
   if (isDemoMode()) {
-    return sendSuccess(res, listDemoSuppliers(req.user.orgId));
+    let suppliers = listDemoSuppliers(req.user.orgId);
+    if (search) {
+      const needle = String(search).toLowerCase();
+      suppliers = suppliers.filter((s) => s.name.toLowerCase().includes(needle));
+    }
+    return sendSuccess(res, suppliers);
   }
 
-  const suppliers = await Supplier.find({ orgId: req.user.orgId });
+  const filter = { orgId: req.user.orgId, ...buildNameFilter(search) };
+  const suppliers = await Supplier.find(filter);
   return sendSuccess(res, suppliers);
 }));
 
