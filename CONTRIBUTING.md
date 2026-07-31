@@ -205,7 +205,53 @@ and combines these signals into a continuously evolving Digital Twin capable of:
 | 🔴 | Deployment | Deploy production-ready application using Docker, cloud infrastructure, and environment management. |
 | 🔴 | Technical Documentation | Complete developer guides, architecture documentation, deployment instructions, and API references. |
 🟢
+---
 
+# Phase 1 Audit — SupplyLens (Branch: `main`, Post-Merge)
+
+## Status Table
+
+| # | Task | Status | Notes | Files |
+|---|------|--------|-------|-------|
+| **1** | **Authentication** | 🟡 Partial | JWT signing works, bcrypt hashing works. **Issues:** No separate `/register` endpoint — `POST /auth/login` silently creates a new user for any unrecognized email/password (`auth.js:33–53`). No refresh tokens (single 7-day access token, no rotation/revocation). `role` field exists on the `User` schema but is **never checked** anywhere (no RBAC middleware or role guards). Token is sent via custom `x-auth-token` header instead of `Authorization: Bearer`. Auth middleware does not distinguish expired vs. malformed vs. missing tokens. | `server/routes/auth.js`<br>`server/middleware/auth.js`<br>`server/models/User.js` |
+| **2** | **Supplier CRUD** | 🟡 Partial | **Create** ✅, **Read (list + by-id)** ✅. **Update** ❌ (no `PUT/PATCH` route). **Delete** ❌ (no `DELETE` route). **Search/Filter** ❌ (no query parameters handled). **Pagination** ❌ (`Supplier.find({ orgId })` returns the entire collection). **Validation** ❌ (only Mongoose `required`; no `express-validator`; `POST /` doesn't validate `name` or `country` before insertion). | `server/routes/suppliers.js` *(only 69 lines, 2 routes)* |
+| **3** | **Dashboard** | 🟡 Partial | Supplier list grid renders (`Dashboard.jsx`), risk badge exists (`RiskBadge.jsx`). **Missing:** KPIs, aggregate statistics, charts, recent activity feed. No chart library installed (`recharts`, `chart.js`, `victory`, etc.). Layout is not responsive—single fixed-width centered card using inline style objects with no breakpoints. | `client/src/pages/Dashboard.jsx` |
+| **4** | **Database Design** | 🟡 Partial | Schemas exist for `User`, `Supplier`, `Document`, `DocChunk`, and `NewsCache`. **Issues:** `Supplier.orgId` references `Organisation`, but no `Organisation` model exists (dangling reference). No index on `Supplier.orgId` despite every query filtering by it. No compound index (e.g., `{ orgId: 1, name: 1 }`) to prevent duplicate supplier names per organization. Validation is minimal (only `required`/`enum`; no length limits, email regex, or score bounds). `User.role` enum (`admin`/`viewer`) is never used downstream. | `server/models/*.js` |
+| **5** | **REST API** | 🟡 Partial | Routes are reasonably RESTful (`/api/auth`, `/api/suppliers`, `/api/documents`, `/api/news`, `/api/rag`) and mounted in `index.js`. CRUD remains incomplete (see #2). Responses have inconsistent formats (`res.status(500).send('Server Error')` vs. `res.json({ msg: ... })` vs. `res.json(data)`), with no standardized response envelope. | `server/routes/*.js` |
+| **6** | **Error Handling** | 🔴 Missing | No centralized error-handling middleware (`app.use((err, req, res, next) => ...)`). No 404 handler. Each route manually implements `try/catch` with inconsistent response formats (`.send('Server Error')`, `.json({ msg })`). Some routes swallow errors and return fake success (e.g., `rag.js:21–24`, `documents.js:22–28`). No standardized `{ success, data, error }` response structure. | *None — architecturally absent* |
+| **7** | **UI Components** | 🟠 Partial / Broken | Components exist (`SupplierCard`, `NewsPanel`, `RiskBadge`, `RagChatDrawer`, `SupplierDetail`, `Login`, `Dashboard`) but styling is inconsistent and partially non-functional. Most components use inline style objects, while `RiskBadge.jsx` and `RagChatDrawer.jsx` use Tailwind classes (`bg-green-100`, `flex`, `flex-col`, etc.) **without Tailwind installed or configured** (no `tailwind.config.js`, no PostCSS config, no CSS import in `main.jsx`, no dependency in `package.json`). `client/src/hooks/useSupplier.js` and `client/src/pages/DocumentVault.jsx` are unused dead code. Upload/vault logic is duplicated in `SupplierDetail.jsx`. Missing dependencies: `lucide-react` and `axios` are imported but not installed, causing runtime `module not found` errors. | `client/src/components/`<br>`client/src/pages/` |
+| **8** | **API Documentation** | 🔴 Missing | No `swagger-jsdoc`, `swagger-ui-express`, OpenAPI YAML/JSON, or JSDoc `@swagger` comments. Documentation tooling is neither installed nor referenced anywhere in the backend. | *None* |
+
+
+***Dependency Check***
+server/package.json — has: jsonwebtoken, bcryptjs, mongoose, express, cors, multer, dotenv, node-cron, pdf-parse, @google/generative-ai, axios. Missing for Phase 1: express-validator (or joi/zod), swagger-jsdoc + swagger-ui-express, no refresh-token/rotation library needed (can be done with plain jsonwebtoken, but nothing scaffolded).
+
+client/package.json — has only: react, react-dom, @vitejs/plugin-react, vite. Missing but imported in code (broken): axios, lucide-react. Missing for spec: tailwindcss (+ @tailwindcss/vite or postcss/autoprefixer), a chart library (recharts is the natural fit given the spec explicitly name-drops it).
+
+***Prioritized Build Plan (dependency order)***
+1. Fix broken installs first — add axios and lucide-react to client/package.json (or remove the lucide-react import if icons aren't essential yet). Nothing frontend can be verified to run until this is fixed.
+2. Finalize DB schemas — add missing Organisation model (or drop the dangling ref), add orgId index on Supplier, add compound index for org+name uniqueness, tighten schema validation (string lengths, riskScore bounds, email format). This underpins everything else (CRUD, dashboard aggregates).
+3. Auth hardening — split login from an explicit register endpoint, add refresh-token issuance + rotation endpoint, add an RBAC middleware (requireRole('admin')) and apply it to mutating routes, standardize on Authorization: Bearer header (or explicitly document why x-auth-token is kept).
+4. Centralized error handling — add a 404 handler + Express error-handling middleware in index.js, define one standard response envelope, replace all ad-hoc res.status(500).send(...) calls across routes to funnel through it.
+5. Supplier CRUD completion — add PUT/PATCH (edit), DELETE, and query-param-driven search/filter/pagination to suppliers.js, wire up express-validator (or equivalent) for input validation on create/update.
+6. REST API consistency pass — once CRUD + error handling exist, normalize all existing endpoints (auth, documents, news, rag) to the same response envelope and status-code conventions.
+7. UI component/styling decision — pick one styling approach: either actually install and configure Tailwind (to match the components already written against it) or convert RiskBadge/RagChatDrawer to the inline-style convention used elsewhere. Delete or implement the dead useSupplier.js / DocumentVault.jsx files.
+8. Dashboard KPIs/charts — install recharts, build KPI/stat-tile components and a recent-activity feed on top of the now-complete supplier CRUD + finalized schemas (needs #2 and #5 done first to have real aggregate data to chart).
+9.API documentation — add swagger-jsdoc + swagger-ui-express and annotate the now-stabilized endpoints last, once routes/response shapes aren't still changing.
+
+No code changes made. Let me know which item you want to tackle first and I'll wait for your go-ahead before touching anything.
+
+That background command already finished and was folded into the audit above — no new action needed here. Audit stands as delivered; waiting on your go-ahead for which Phase 1 item to start with.
+---
+
+## Legend
+
+| Status | Meaning |
+|--------|---------|
+| 🟢 Complete | Fully implemented |
+| 🟡 Partial | Core functionality exists but is incomplete |
+| 🟠 Partial / Broken | Exists but has significant implementation or dependency issues |
+| 🔴 Missing | Not implemented |
 ---
 
 # 🎯 Target Release
