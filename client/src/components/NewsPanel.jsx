@@ -18,7 +18,7 @@ export default function NewsPanel({ supplierId }) {
 			try {
 				const response = await api.get(`/news/${supplierId}`);
 				if (active) {
-					setNews(response.data || []);
+					setNews(response.data.data || []);
 				}
 			} catch {
 				if (active) {
