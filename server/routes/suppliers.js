@@ -1,7 +1,9 @@
 const express = require('express');
+const { body } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
+const validate = require('../middleware/validate');
 const Supplier = require('../models/Supplier');
 const mongoose = require('mongoose');
 const {
@@ -16,6 +18,29 @@ const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
+
+const CATEGORY_VALUES = ['raw_material', 'logistics', 'saas', 'other'];
+const uppercase = (value) => (typeof value === 'string' ? value.toUpperCase() : value);
+
+// Mirrors the Supplier schema's own constraints (models/Supplier.js) so bad
+// input is rejected with field-level messages here, before it ever reaches
+// Mongoose - a raw ValidationError is still handled centrally as a fallback,
+// but this gives callers a much better shape to build a form around.
+const createSupplierValidation = [
+  body('name').trim().isLength({ min: 1, max: 200 }).withMessage('Name must be between 1 and 200 characters'),
+  body('country').trim().customSanitizer(uppercase).matches(/^[A-Z]{2}$/).withMessage('Country must be a 2-letter ISO code (e.g. US)'),
+  body('category').optional().isIn(CATEGORY_VALUES).withMessage(`Category must be one of: ${CATEGORY_VALUES.join(', ')}`),
+  body('riskScore').optional().isFloat({ min: 0, max: 100 }).withMessage('Risk score must be between 0 and 100').toFloat(),
+  body('paymentTerms').optional().trim().isLength({ max: 100 }).withMessage('Payment terms must be at most 100 characters'),
+];
+
+const updateSupplierValidation = [
+  body('name').optional().trim().isLength({ min: 1, max: 200 }).withMessage('Name must be between 1 and 200 characters'),
+  body('country').optional().trim().customSanitizer(uppercase).matches(/^[A-Z]{2}$/).withMessage('Country must be a 2-letter ISO code (e.g. US)'),
+  body('category').optional().isIn(CATEGORY_VALUES).withMessage(`Category must be one of: ${CATEGORY_VALUES.join(', ')}`),
+  body('riskScore').optional().isFloat({ min: 0, max: 100 }).withMessage('Risk score must be between 0 and 100').toFloat(),
+  body('paymentTerms').optional().trim().isLength({ max: 100 }).withMessage('Payment terms must be at most 100 characters'),
+];
 
 const SUPPLIER_NOT_FOUND = () => new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
 
@@ -54,7 +79,7 @@ router.get('/', auth, asyncHandler(async (req, res) => {
 }));
 
 // Create a supplier (admin only)
-router.post('/', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+router.post('/', auth, requireRole('admin'), validate(createSupplierValidation), asyncHandler(async (req, res) => {
   const { name, category, country, contractExpiry, paymentTerms } = req.body;
 
   if (isDemoMode()) {
@@ -111,8 +136,8 @@ const updateHandler = asyncHandler(async (req, res) => {
 });
 
 // Update a supplier, scoped to the requester's org
-router.put('/:id', auth, updateHandler);
-router.patch('/:id', auth, updateHandler);
+router.put('/:id', auth, validate(updateSupplierValidation), updateHandler);
+router.patch('/:id', auth, validate(updateSupplierValidation), updateHandler);
 
 // Delete a supplier, scoped to the requester's org (admin only)
 router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) => {
