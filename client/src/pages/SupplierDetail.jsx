@@ -5,6 +5,7 @@ import NewsPanel from '../components/NewsPanel';
 import RagChatDrawer from '../components/RagChatDrawer';
 import Button from '../components/Button';
 import Input from '../components/Input';
+import Modal from '../components/Modal';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -208,27 +209,9 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                   Edit
                 </Button>
                 {isAdmin ? (
-                  confirmingDelete ? (
-                    <span className="flex items-center gap-2">
-                      <span className="text-red-700 text-[0.9rem] font-semibold">Delete this supplier?</span>
-                      <Button
-                        variant="danger"
-                        className="rounded-full px-3.5 py-2.5"
-                        onClick={handleDelete}
-                        loading={deleting}
-                        loadingText="Deleting..."
-                      >
-                        Confirm
-                      </Button>
-                      <Button className={pillButtonClass} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
-                        Cancel
-                      </Button>
-                    </span>
-                  ) : (
-                    <Button variant="danger" className="rounded-full px-3.5 py-2.5" onClick={() => setConfirmingDelete(true)}>
-                      Delete
-                    </Button>
-                  )
+                  <Button variant="danger" className="rounded-full px-3.5 py-2.5" onClick={() => setConfirmingDelete(true)}>
+                    Delete
+                  </Button>
                 ) : null}
               </div>
             </div>
@@ -281,6 +264,26 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       </div>
 
       <RagChatDrawer supplierId={supplierId} />
+
+      <Modal open={confirmingDelete} onClose={() => (deleting ? null : setConfirmingDelete(false))}>
+        <p className="m-0 mb-4 text-red-700 text-[0.95rem] font-semibold">
+          Delete this supplier?
+        </p>
+        <div className="flex gap-2.5 justify-end">
+          <Button className={pillButtonClass} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            className="rounded-full px-3.5 py-2.5"
+            onClick={handleDelete}
+            loading={deleting}
+            loadingText="Deleting..."
+          >
+            Confirm
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
