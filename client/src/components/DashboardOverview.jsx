@@ -1,11 +1,29 @@
+import Card from './Card';
 import StatCard from './StatCard';
 import CategoryDistributionChart from './CategoryDistributionChart';
 import SupplierGrowthChart from './SupplierGrowthChart';
 import RecentActivityFeed from './RecentActivityFeed';
 
+const SkeletonBlock = ({ className }) => (
+  <div className={`rounded-2xl bg-white/60 border border-slate-400/25 animate-pulse ${className}`} />
+);
+
 export default function DashboardOverview({ stats, loading, error, onOpenSupplier }) {
   if (loading) {
-    return <p className="m-0 text-slate-600">Loading dashboard statistics...</p>;
+    return (
+      <div className="grid gap-3.5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {[0, 1, 2, 3].map((i) => (
+            <SkeletonBlock key={i} className="h-[104px]" />
+          ))}
+        </div>
+        <div className="grid lg:grid-cols-2 gap-3.5">
+          <SkeletonBlock className="h-[320px] rounded-[20px]" />
+          <SkeletonBlock className="h-[320px] rounded-[20px]" />
+        </div>
+        <SkeletonBlock className="h-[240px] rounded-[20px]" />
+      </div>
+    );
   }
 
   if (error) {
@@ -13,6 +31,17 @@ export default function DashboardOverview({ stats, loading, error, onOpenSupplie
   }
 
   if (!stats) return null;
+
+  if (stats.totalSuppliers === 0) {
+    return (
+      <Card className="rounded-[20px] p-6 bg-white/55 border-dashed">
+        <h2 className="m-0 text-[1.2rem] text-slate-900">No suppliers yet</h2>
+        <p className="mt-2 mb-0 text-slate-600 leading-[1.7]">
+          Add your first supplier to see KPIs, category distribution, growth trends, and recent activity here.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid gap-3.5">
