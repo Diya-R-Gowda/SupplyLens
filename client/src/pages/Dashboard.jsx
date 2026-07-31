@@ -3,6 +3,7 @@ import api from '../api/axios';
 import SupplierCard from '../components/SupplierCard';
 import SupplierDetail from './SupplierDetail';
 import Button from '../components/Button';
+import DashboardOverview from '../components/DashboardOverview';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -28,6 +29,43 @@ export default function Dashboard({ user, onLogout }) {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: PAGE_LIMIT, totalPages: 1 });
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadStats = async () => {
+      setStatsLoading(true);
+      try {
+        const response = await api.get('/dashboard/stats');
+        if (active) {
+          setStats(response.data.data);
+          setStatsError('');
+        }
+      } catch (requestError) {
+        if (active) {
+          if (requestError?.response?.status === 401) {
+            onLogout();
+            return;
+          }
+          setStatsError('Unable to load dashboard statistics');
+        }
+      } finally {
+        if (active) {
+          setStatsLoading(false);
+        }
+      }
+    };
+
+    loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, [refreshKey, onLogout]);
 
   // Debounce the raw input before it drives a refetch.
   useEffect(() => {
@@ -104,6 +142,8 @@ export default function Dashboard({ user, onLogout }) {
               Sign out
             </Button>
           </div>
+
+          <DashboardOverview stats={stats} loading={statsLoading} error={statsError} />
 
           <div className="flex flex-wrap gap-2.5">
             <input
