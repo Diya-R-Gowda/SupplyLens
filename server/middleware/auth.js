@@ -5,7 +5,7 @@ module.exports = (req, res, next) => {
   const [scheme, token] = header.split(' ');
 
   if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({ msg: 'No token, authorization denied' });
+    return res.status(401).json({ msg: 'No token, authorization denied', code: 'TOKEN_MISSING' });
   }
 
   try {
@@ -13,6 +13,9 @@ module.exports = (req, res, next) => {
     req.user = decoded; // Contains user id, orgId, role
     next();
   } catch (err) {
-    res.status(401).json({ msg: 'Token is not valid' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ msg: 'Token has expired', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(401).json({ msg: 'Token is not valid', code: 'TOKEN_INVALID' });
   }
 };

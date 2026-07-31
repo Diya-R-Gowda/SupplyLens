@@ -49,8 +49,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const { config, response } = error;
+    const code = response?.data?.code;
 
-    if (response?.status === 401 && !config?._retriedAfterRefresh && getRefreshToken()) {
+    // Only an expired access token is worth silently refreshing. A missing or
+    // malformed token means the client's auth state is broken some other way -
+    // retrying with a refresh won't fix that, so force re-login instead.
+    if (response?.status === 401 && code === 'TOKEN_EXPIRED' && !config?._retriedAfterRefresh && getRefreshToken()) {
       config._retriedAfterRefresh = true;
       try {
         const { data } = await performRefresh();
