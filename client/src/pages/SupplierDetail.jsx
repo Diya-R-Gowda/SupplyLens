@@ -3,6 +3,7 @@ import api from '../api/axios';
 import { RiskBadge } from '../components/RiskBadge';
 import NewsPanel from '../components/NewsPanel';
 import RagChatDrawer from '../components/RagChatDrawer';
+import Button from '../components/Button';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -32,7 +33,7 @@ const formFromSupplier = (supplier) => ({
 });
 
 const inputClass = 'border border-slate-300 rounded-xl px-3 py-2.5 text-[0.95rem] bg-white/92';
-const pillButtonClass = 'border border-slate-300 rounded-full bg-white/80 px-3.5 py-2.5 font-bold cursor-pointer';
+const pillButtonClass = 'rounded-full px-3.5 py-2.5';
 
 export default function SupplierDetail({ supplierId, user, onBack, onChanged }) {
   const [supplier, setSupplier] = useState(null);
@@ -119,7 +120,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     <div className="flex min-h-[72vh] gap-4.5">
       <div className="flex-1 grid gap-5 overflow-y-auto">
         <div className="flex justify-between items-center gap-3">
-          <button onClick={onBack} type="button" className={pillButtonClass}>Back</button>
+          <Button onClick={onBack} className={pillButtonClass}>Back</Button>
           <RiskBadge score={supplier.riskScore} />
         </div>
 
@@ -165,16 +166,18 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             {saveError ? <p className="m-0 text-red-700">{saveError}</p> : null}
 
             <div className="flex gap-2.5 mt-1">
-              <button
+              <Button
                 type="submit"
-                className="border-none rounded-full px-4 py-2.5 font-bold text-white bg-gradient-to-br from-blue-700 to-teal-700 cursor-pointer disabled:opacity-60"
-                disabled={saving}
+                variant="primary"
+                className="rounded-full px-4 py-2.5"
+                loading={saving}
+                loadingText="Saving..."
               >
-                {saving ? 'Saving...' : 'Save changes'}
-              </button>
-              <button type="button" className={pillButtonClass} onClick={cancelEditing} disabled={saving}>
+                Save changes
+              </Button>
+              <Button className={pillButtonClass} onClick={cancelEditing} disabled={saving}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
@@ -185,33 +188,30 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 <p className="mt-2 mb-0 text-slate-600">{supplier.category} | {supplier.country}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" className={pillButtonClass} onClick={startEditing}>
+                <Button className={pillButtonClass} onClick={startEditing}>
                   Edit
-                </button>
+                </Button>
                 {isAdmin ? (
                   confirmingDelete ? (
                     <span className="flex items-center gap-2">
                       <span className="text-red-700 text-[0.9rem] font-semibold">Delete this supplier?</span>
-                      <button
-                        type="button"
-                        className="border-none rounded-full bg-red-700 text-white px-3.5 py-2.5 font-bold cursor-pointer"
+                      <Button
+                        variant="danger"
+                        className="rounded-full px-3.5 py-2.5"
                         onClick={handleDelete}
-                        disabled={deleting}
+                        loading={deleting}
+                        loadingText="Deleting..."
                       >
-                        {deleting ? 'Deleting...' : 'Confirm'}
-                      </button>
-                      <button type="button" className={pillButtonClass} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                        Confirm
+                      </Button>
+                      <Button className={pillButtonClass} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
                         Cancel
-                      </button>
+                      </Button>
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      className="border border-red-300 rounded-full bg-red-50/90 text-red-700 px-3.5 py-2.5 font-bold cursor-pointer"
-                      onClick={() => setConfirmingDelete(true)}
-                    >
+                    <Button variant="danger" className="rounded-full px-3.5 py-2.5" onClick={() => setConfirmingDelete(true)}>
                       Delete
-                    </button>
+                    </Button>
                   )
                 ) : null}
               </div>

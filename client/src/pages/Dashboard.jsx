@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import SupplierCard from '../components/SupplierCard';
 import SupplierDetail from './SupplierDetail';
+import Button from '../components/Button';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -99,13 +100,9 @@ export default function Dashboard({ user, onLogout }) {
               <p className="m-0 uppercase tracking-[0.18em] text-xs font-bold text-[#3853b5]">Live API data</p>
               <h1 className="mt-2 mb-0 text-[clamp(1.8rem,4vw,2.8rem)] leading-[1.05] text-slate-900">Supplier dashboard</h1>
             </div>
-            <button
-              onClick={onLogout}
-              className="border border-slate-300 rounded-full bg-white/80 px-3.5 py-2.5 font-bold cursor-pointer"
-              type="button"
-            >
+            <Button onClick={onLogout} className="rounded-full px-3.5 py-2.5">
               Sign out
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-wrap gap-2.5">
@@ -158,25 +155,23 @@ export default function Dashboard({ user, onLogout }) {
 
           {!loading && pagination.total > 0 ? (
             <div className="flex items-center justify-center gap-3.5">
-              <button
-                type="button"
+              <Button
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
                 disabled={pagination.page <= 1}
-                className="border border-slate-300 rounded-full bg-white/80 px-4 py-2 font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-full px-4 py-2"
               >
                 Previous
-              </button>
+              </Button>
               <span className="text-slate-600 text-[0.9rem]">
                 Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
               </span>
-              <button
-                type="button"
+              <Button
                 onClick={() => setPage((p) => Math.min(p + 1, pagination.totalPages))}
                 disabled={pagination.page >= pagination.totalPages}
-                className="border border-slate-300 rounded-full bg-white/80 px-4 py-2 font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-full px-4 py-2"
               >
                 Next
-              </button>
+              </Button>
             </div>
           ) : null}
         </>

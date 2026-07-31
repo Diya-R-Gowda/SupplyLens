@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../api/axios';
+import Button from '../components/Button';
 
 export default function Login({ onSuccess }) {
   const [mode, setMode] = useState('login');
@@ -62,13 +63,15 @@ export default function Login({ onSuccess }) {
 
         {error ? <p className="m-0 text-red-700 text-[0.95rem]">{error}</p> : null}
 
-        <button
+        <Button
           type="submit"
-          className="mt-1.5 border-none rounded-2xl px-[18px] py-3.5 text-base font-bold text-white bg-gradient-to-br from-blue-700 to-teal-700 cursor-pointer disabled:opacity-60"
-          disabled={loading}
+          variant="primary"
+          className="mt-1.5 rounded-2xl px-[18px] py-3.5 text-base"
+          loading={loading}
+          loadingText="Please wait..."
         >
-          {loading ? 'Please wait...' : isRegister ? 'Create account' : 'Continue'}
-        </button>
+          {isRegister ? 'Create account' : 'Continue'}
+        </Button>
 
         <button
           type="button"
