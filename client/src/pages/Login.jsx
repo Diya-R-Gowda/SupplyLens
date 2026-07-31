@@ -2,10 +2,13 @@ import { useState } from 'react';
 import api from '../api/axios';
 
 export default function Login({ onSuccess }) {
-  const [email, setEmail] = useState('demo@supplylens.local');
-  const [password, setPassword] = useState('password123');
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isRegister = mode === 'register';
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -13,10 +16,10 @@ export default function Login({ onSuccess }) {
     setError('');
 
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post(isRegister ? '/auth/register' : '/auth/login', { email, password });
       onSuccess(response.data.token);
     } catch (requestError) {
-      setError(requestError?.response?.data?.msg || 'Unable to sign in');
+      setError(requestError?.response?.data?.msg || (isRegister ? 'Unable to create account' : 'Unable to sign in'));
     } finally {
       setLoading(false);
     }
@@ -25,8 +28,12 @@ export default function Login({ onSuccess }) {
   return (
     <div style={styles.shell}>
       <p style={styles.kicker}>SupplyLens</p>
-      <h1 style={styles.title}>Sign in to your supplier workspace</h1>
-      <p style={styles.copy}>Use any email and password to create a local demo workspace, then load supplier data from the API.</p>
+      <h1 style={styles.title}>{isRegister ? 'Create your supplier workspace' : 'Sign in to your supplier workspace'}</h1>
+      <p style={styles.copy}>
+        {isRegister
+          ? 'Register a new workspace with an email and password.'
+          : 'Sign in with your existing email and password.'}
+      </p>
 
       <form onSubmit={handleSubmit} style={styles.form}>
         <label style={styles.label}>
@@ -47,14 +54,25 @@ export default function Login({ onSuccess }) {
             onChange={(event) => setPassword(event.target.value)}
             style={styles.input}
             type="password"
-            autoComplete="current-password"
+            autoComplete={isRegister ? 'new-password' : 'current-password'}
           />
         </label>
 
         {error ? <p style={styles.error}>{error}</p> : null}
 
         <button type="submit" style={styles.button} disabled={loading}>
-          {loading ? 'Signing in...' : 'Continue'}
+          {loading ? 'Please wait...' : isRegister ? 'Create account' : 'Continue'}
+        </button>
+
+        <button
+          type="button"
+          style={styles.toggle}
+          onClick={() => {
+            setMode(isRegister ? 'login' : 'register');
+            setError('');
+          }}
+        >
+          {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Register"}
         </button>
       </form>
     </div>
@@ -122,5 +140,15 @@ const styles = {
     color: 'white',
     background: 'linear-gradient(135deg, #1d4ed8 0%, #0f766e 100%)',
     cursor: 'pointer',
+  },
+  toggle: {
+    marginTop: '2px',
+    border: 'none',
+    background: 'none',
+    color: '#3853b5',
+    fontWeight: 600,
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    textAlign: 'center',
   },
 };

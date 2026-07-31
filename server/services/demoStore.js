@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const demoUsers = new Map();
+const demoUsersById = new Map();
 const demoSuppliersByOrg = new Map();
 const demoSuppliersById = new Map();
 const demoNewsBySupplierId = new Map();
@@ -37,12 +38,10 @@ const registerDemoSupplier = (supplier) => {
   return supplier;
 };
 
-const ensureDemoUser = (email, password) => {
+const registerDemoUser = (email, password) => {
   const key = email.toLowerCase();
-  const existing = demoUsers.get(key);
-
-  if (existing) {
-    return existing.password === password ? existing : null;
+  if (demoUsers.has(key)) {
+    return null; // account already exists
   }
 
   const orgId = new mongoose.Types.ObjectId().toString();
@@ -55,11 +54,20 @@ const ensureDemoUser = (email, password) => {
   };
 
   demoUsers.set(key, user);
+  demoUsersById.set(user._id, user);
   const seedSupplier = registerDemoSupplier(createSeedSupplier(orgId));
   demoSuppliersByOrg.set(orgId, [seedSupplier]);
 
   return user;
 };
+
+const findDemoUser = (email, password) => {
+  const existing = demoUsers.get(email.toLowerCase());
+  if (!existing || existing.password !== password) return null;
+  return existing;
+};
+
+const getDemoUserById = (id) => demoUsersById.get(String(id)) || null;
 
 const listDemoSuppliers = (orgId) => demoSuppliersByOrg.get(String(orgId)) || [];
 
@@ -128,7 +136,9 @@ const answerDemoQuestion = (supplierId, question) => {
 };
 
 module.exports = {
-  ensureDemoUser,
+  registerDemoUser,
+  findDemoUser,
+  getDemoUserById,
   listDemoSuppliers,
   getDemoSupplier,
   upsertDemoSupplier,
