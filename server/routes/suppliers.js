@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
 const Supplier = require('../models/Supplier');
 const mongoose = require('mongoose');
 const { listDemoSuppliers, upsertDemoSupplier, getDemoSupplier } = require('../services/demoStore');
@@ -19,8 +20,8 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Create a supplier
-router.post('/', auth, async (req, res) => {
+// Create a supplier (admin only)
+router.post('/', auth, requireRole('admin'), async (req, res) => {
   const { name, category, country, contractExpiry, paymentTerms } = req.body;
   try {
     if (mongoose.connection.readyState !== 1) {
