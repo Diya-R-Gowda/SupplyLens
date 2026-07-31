@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
-import api, { getAccessToken, getRefreshToken, setTokens, clearTokens, setOnAuthFailure } from './api/axios';
+import api, { getAccessToken, getRefreshToken, getUser, setTokens, clearTokens, setOnAuthFailure } from './api/axios';
 
 export default function App() {
 	const [authed, setAuthed] = useState(() => !!getAccessToken());
+	const [user, setUser] = useState(() => getUser());
 
 	useEffect(() => {
-		setOnAuthFailure(() => setAuthed(false));
+		setOnAuthFailure(() => {
+			setAuthed(false);
+			setUser(null);
+		});
 	}, []);
 
 	const handleLoginSuccess = (tokens) => {
 		setTokens(tokens);
+		setUser(tokens.user);
 		setAuthed(true);
 	};
 
@@ -26,6 +31,7 @@ export default function App() {
 		} finally {
 			clearTokens();
 			setAuthed(false);
+			setUser(null);
 		}
 	};
 
@@ -33,7 +39,7 @@ export default function App() {
 		<main style={styles.page}>
 			<section style={styles.card}>
 				{authed ? (
-					<Dashboard onLogout={handleLogout} />
+					<Dashboard user={user} onLogout={handleLogout} />
 				) : (
 					<Login onSuccess={handleLoginSuccess} />
 				)}
