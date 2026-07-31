@@ -4,6 +4,7 @@ import { RiskBadge } from '../components/RiskBadge';
 import NewsPanel from '../components/NewsPanel';
 import RagChatDrawer from '../components/RagChatDrawer';
 import Button from '../components/Button';
+import Input from '../components/Input';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -126,10 +127,14 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
 
         {isEditing ? (
           <form onSubmit={handleSave} className="grid gap-3 p-5 rounded-[20px] bg-white/75 border border-slate-400/35">
-            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
-              Name
-              <input value={form.name} onChange={handleFormChange('name')} className={inputClass} required />
-            </label>
+            <Input
+              label="Name"
+              labelClassName="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800"
+              value={form.name}
+              onChange={handleFormChange('name')}
+              className={inputClass}
+              required
+            />
             <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Category
               <select value={form.category} onChange={handleFormChange('category')} className={inputClass}>
@@ -139,29 +144,40 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 ))}
               </select>
             </label>
-            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
-              Country
-              <input value={form.country} onChange={handleFormChange('country')} className={inputClass} maxLength={2} required />
-            </label>
-            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
-              Payment terms
-              <input value={form.paymentTerms} onChange={handleFormChange('paymentTerms')} className={inputClass} />
-            </label>
-            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
-              Risk score (0-100)
-              <input
-                value={form.riskScore}
-                onChange={handleFormChange('riskScore')}
-                className={inputClass}
-                type="number"
-                min="0"
-                max="100"
-              />
-            </label>
-            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
-              Contract expiry
-              <input value={form.contractExpiry} onChange={handleFormChange('contractExpiry')} className={inputClass} type="date" />
-            </label>
+            <Input
+              label="Country"
+              labelClassName="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800"
+              value={form.country}
+              onChange={handleFormChange('country')}
+              className={inputClass}
+              maxLength={2}
+              required
+            />
+            <Input
+              label="Payment terms"
+              labelClassName="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800"
+              value={form.paymentTerms}
+              onChange={handleFormChange('paymentTerms')}
+              className={inputClass}
+            />
+            <Input
+              label="Risk score (0-100)"
+              labelClassName="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800"
+              value={form.riskScore}
+              onChange={handleFormChange('riskScore')}
+              className={inputClass}
+              type="number"
+              min="0"
+              max="100"
+            />
+            <Input
+              label="Contract expiry"
+              labelClassName="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800"
+              value={form.contractExpiry}
+              onChange={handleFormChange('contractExpiry')}
+              className={inputClass}
+              type="date"
+            />
 
             {saveError ? <p className="m-0 text-red-700">{saveError}</p> : null}
 

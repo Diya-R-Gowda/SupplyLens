@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from '../api/axios';
 import Button from '../components/Button';
+import Input from '../components/Input';
 
 export default function Login({ onSuccess }) {
   const [mode, setMode] = useState('login');
@@ -39,27 +40,23 @@ export default function Login({ onSuccess }) {
       </p>
 
       <form onSubmit={handleSubmit} className="grid gap-3.5 mt-2">
-        <label className="grid gap-2 text-[0.92rem] font-semibold text-slate-800">
-          Email
-          <input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
-            type="email"
-            autoComplete="email"
-          />
-        </label>
+        <Input
+          label="Email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
+          type="email"
+          autoComplete="email"
+        />
 
-        <label className="grid gap-2 text-[0.92rem] font-semibold text-slate-800">
-          Password
-          <input
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
-            type="password"
-            autoComplete={isRegister ? 'new-password' : 'current-password'}
-          />
-        </label>
+        <Input
+          label="Password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
+          type="password"
+          autoComplete={isRegister ? 'new-password' : 'current-password'}
+        />
 
         {error ? <p className="m-0 text-red-700 text-[0.95rem]">{error}</p> : null}
 
