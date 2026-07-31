@@ -15,7 +15,7 @@ export default function RagChatDrawer({ supplierId }) {
     
     try {
       const res = await api.post(`/rag/${supplierId}`, { question: query });
-      setChat(prev => [...prev, { role: 'bot', text: res.data.answer }]);
+      setChat(prev => [...prev, { role: 'bot', text: res.data.data.answer }]);
     } catch (err) {
       setChat(prev => [...prev, { role: 'bot', text: 'Error connecting to AI.' }]);
     }
