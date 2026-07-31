@@ -28,7 +28,7 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
-  if (token) config.headers['x-auth-token'] = token;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -55,7 +55,7 @@ api.interceptors.response.use(
       try {
         const { data } = await performRefresh();
         setTokens(data);
-        config.headers['x-auth-token'] = data.accessToken;
+        config.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(config);
       } catch (refreshError) {
         clearTokens();
