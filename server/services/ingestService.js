@@ -1,8 +1,9 @@
 const pdf = require('pdf-parse');
 const DocChunk = require('../models/DocChunk');
+const Document = require('../models/Document');
 const { getEmbeddings } = require('./embedService');
 
-exports.processPDF = async (supplierId, fileBuffer) => {
+exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-document.pdf') => {
   // 1. Extract Text
   const data = await pdf(fileBuffer);
   const fullText = data.text;
@@ -27,6 +28,13 @@ exports.processPDF = async (supplierId, fileBuffer) => {
       chunkIndex: i
     });
   }
+
+  await Document.create({
+    supplierId,
+    fileName,
+    totalChunks: chunks.length,
+    uploadedAt: new Date(),
+  });
   
   return { success: true, totalChunks: chunks.length };
 };
