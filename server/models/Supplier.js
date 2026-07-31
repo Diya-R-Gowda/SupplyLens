@@ -1,11 +1,11 @@
 const mongoose = require('mongoose');
 const supplierSchema = new mongoose.Schema({
-  name: { type: String, required: true },
+  name: { type: String, required: true, trim: true, minlength: 1, maxlength: 200 },
   category: { type: String, enum: ['raw_material', 'logistics', 'saas', 'other'] },
-  country: { type: String, required: true }, // ISO 3166-1 alpha-2
-  riskScore: { type: Number, default: 0 },
+  country: { type: String, required: true, trim: true, uppercase: true, match: /^[A-Z]{2}$/ }, // ISO 3166-1 alpha-2
+  riskScore: { type: Number, default: 0, min: 0, max: 100 }, // matches the 0-100 scale used by RiskBadge.jsx
   contractExpiry: Date,
-  paymentTerms: String,
+  paymentTerms: { type: String, trim: true, maxlength: 100 },
   orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organisation', required: true }
 });
 
