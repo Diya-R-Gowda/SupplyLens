@@ -114,4 +114,17 @@ const updateHandler = asyncHandler(async (req, res) => {
 router.put('/:id', auth, updateHandler);
 router.patch('/:id', auth, updateHandler);
 
+// Delete a supplier, scoped to the requester's org (admin only)
+router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    findOrgDemoSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+    deleteDemoSupplier(req.user.orgId, req.params.id);
+    return sendSuccess(res, null, { message: 'Supplier deleted' });
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId);
+  await supplier.deleteOne();
+  return sendSuccess(res, null, { message: 'Supplier deleted' });
+}));
+
 module.exports = router;
