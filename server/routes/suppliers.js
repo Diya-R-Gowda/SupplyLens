@@ -44,14 +44,13 @@ const updateSupplierValidation = [
 
 const SUPPLIER_NOT_FOUND = () => new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
 
-// Scoped to the requester's org: a malformed id, a missing supplier, and a
-// supplier that belongs to a different org all look identical (404) from the
-// outside - never leak which one it was.
+// Scoped to the requester's org: a missing supplier and a supplier that
+// belongs to a different org look identical (404) from the outside - never
+// leak which one it was. A malformed id is a different kind of problem (it
+// isn't shaped like an id at all, valid or not) and is deliberately NOT
+// folded in here - same as GET/:id, it's left to throw its own CastError,
+// which the centralized error middleware turns into a 400.
 const findOrgSupplier = async (id, orgId) => {
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw SUPPLIER_NOT_FOUND();
-  }
-
   const supplier = await Supplier.findOne({ _id: id, orgId });
   if (!supplier) {
     throw SUPPLIER_NOT_FOUND();
