@@ -1,11 +1,12 @@
 const jwt = require('jsonwebtoken');
+const ApiError = require('../utils/ApiError');
 
 module.exports = (req, res, next) => {
   const header = req.header('Authorization') || '';
   const [scheme, token] = header.split(' ');
 
   if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({ msg: 'No token, authorization denied', code: 'TOKEN_MISSING' });
+    return next(new ApiError('No token, authorization denied', 401, 'TOKEN_MISSING'));
   }
 
   try {
@@ -14,8 +15,8 @@ module.exports = (req, res, next) => {
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ msg: 'Token has expired', code: 'TOKEN_EXPIRED' });
+      return next(new ApiError('Token has expired', 401, 'TOKEN_EXPIRED'));
     }
-    return res.status(401).json({ msg: 'Token is not valid', code: 'TOKEN_INVALID' });
+    return next(new ApiError('Token is not valid', 401, 'TOKEN_INVALID'));
   }
 };

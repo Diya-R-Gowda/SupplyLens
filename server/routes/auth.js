@@ -6,6 +6,9 @@ const Supplier = require('../models/Supplier');
 const Organisation = require('../models/Organisation');
 const { registerDemoUser, findDemoUser, getDemoUserById } = require('../services/demoStore');
 const { issueTokenPair, consumeRefreshToken, revokeRefreshToken } = require('../services/tokenService');
+const ApiError = require('../utils/ApiError');
+const asyncHandler = require('../utils/asyncHandler');
+const { sendSuccess } = require('../utils/response');
 
 const router = express.Router();
 
@@ -26,138 +29,114 @@ const seedOrgSupplier = async (orgId) => {
 	}
 };
 
-const authResponse = async (res, status, user, demo) => {
+const buildAuthPayload = async (user, demo) => {
 	const tokens = await issueTokenPair(user, { demo });
-	return res.status(status).json({
+	return {
 		...tokens,
 		user: {
 			email: user.email,
 			role: user.role,
 			orgId: String(user.orgId),
 		},
-	});
+	};
 };
 
-router.post('/register', async (req, res) => {
+router.post('/register', asyncHandler(async (req, res) => {
 	const { email, password } = req.body;
-
 	if (!email || !password) {
-		return res.status(400).json({ msg: 'Email and password are required' });
+		throw new ApiError('Email and password are required', 400, 'CREDENTIALS_REQUIRED');
 	}
 
-	try {
-		const demo = isDemoMode();
+	const demo = isDemoMode();
 
-		if (!demo) {
-			const existing = await User.findOne({ email });
-			if (existing) {
-				return res.status(409).json({ msg: 'An account with this email already exists' });
-			}
-
-			const org = await Organisation.create({ name: `${email.split('@')[0]}'s Organisation` });
-			const hashedPassword = await bcrypt.hash(password, 10);
-			const user = await User.create({
-				email,
-				password: hashedPassword,
-				role: 'admin',
-				orgId: org._id,
-			});
-			org.owner = user._id;
-			await org.save();
-
-			await seedOrgSupplier(org._id);
-
-			return authResponse(res, 201, user, demo);
+	if (!demo) {
+		const existing = await User.findOne({ email });
+		if (existing) {
+			throw new ApiError('An account with this email already exists', 409, 'EMAIL_TAKEN');
 		}
 
-		const demoUser = registerDemoUser(email, password);
-		if (!demoUser) {
-			return res.status(409).json({ msg: 'An account with this email already exists' });
-		}
+		const org = await Organisation.create({ name: `${email.split('@')[0]}'s Organisation` });
+		const hashedPassword = await bcrypt.hash(password, 10);
+		const user = await User.create({
+			email,
+			password: hashedPassword,
+			role: 'admin',
+			orgId: org._id,
+		});
+		org.owner = user._id;
+		await org.save();
 
-		return authResponse(res, 201, demoUser, demo);
-	} catch (error) {
-		console.error(error);
-		return res.status(500).send('Server Error');
+		await seedOrgSupplier(org._id);
+
+		return sendSuccess(res, await buildAuthPayload(user, demo), { status: 201 });
 	}
-});
 
-router.post('/login', async (req, res) => {
+	const demoUser = registerDemoUser(email, password);
+	if (!demoUser) {
+		throw new ApiError('An account with this email already exists', 409, 'EMAIL_TAKEN');
+	}
+
+	return sendSuccess(res, await buildAuthPayload(demoUser, demo), { status: 201 });
+}));
+
+router.post('/login', asyncHandler(async (req, res) => {
 	const { email, password } = req.body;
-
 	if (!email || !password) {
-		return res.status(400).json({ msg: 'Email and password are required' });
+		throw new ApiError('Email and password are required', 400, 'CREDENTIALS_REQUIRED');
 	}
 
-	try {
-		const demo = isDemoMode();
+	const demo = isDemoMode();
 
-		if (!demo) {
-			const user = await User.findOne({ email });
-			if (!user) {
-				return res.status(401).json({ msg: 'Invalid credentials' });
-			}
-
-			const isMatch = await bcrypt.compare(password, user.password);
-			if (!isMatch) {
-				return res.status(401).json({ msg: 'Invalid credentials' });
-			}
-
-			return authResponse(res, 200, user, demo);
-		}
-
-		const demoUser = findDemoUser(email, password);
-		if (!demoUser) {
-			return res.status(401).json({ msg: 'Invalid credentials' });
-		}
-
-		return authResponse(res, 200, demoUser, demo);
-	} catch (error) {
-		console.error(error);
-		return res.status(500).send('Server Error');
-	}
-});
-
-router.post('/refresh', async (req, res) => {
-	const { refreshToken } = req.body;
-
-	if (!refreshToken) {
-		return res.status(400).json({ msg: 'Refresh token is required' });
-	}
-
-	try {
-		const demo = isDemoMode();
-		const userId = await consumeRefreshToken(refreshToken, { demo });
-		if (!userId) {
-			return res.status(401).json({ msg: 'Invalid or expired refresh token', code: 'REFRESH_TOKEN_INVALID' });
-		}
-
-		const user = demo ? getDemoUserById(userId) : await User.findById(userId);
+	if (!demo) {
+		const user = await User.findOne({ email });
 		if (!user) {
-			return res.status(401).json({ msg: 'Invalid or expired refresh token', code: 'REFRESH_TOKEN_INVALID' });
+			throw new ApiError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
 		}
 
-		return authResponse(res, 200, user, demo);
-	} catch (error) {
-		console.error(error);
-		return res.status(500).send('Server Error');
-	}
-});
+		const isMatch = await bcrypt.compare(password, user.password);
+		if (!isMatch) {
+			throw new ApiError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
+		}
 
-router.post('/logout', async (req, res) => {
+		return sendSuccess(res, await buildAuthPayload(user, demo));
+	}
+
+	const demoUser = findDemoUser(email, password);
+	if (!demoUser) {
+		throw new ApiError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
+	}
+
+	return sendSuccess(res, await buildAuthPayload(demoUser, demo));
+}));
+
+router.post('/refresh', asyncHandler(async (req, res) => {
 	const { refreshToken } = req.body;
-
 	if (!refreshToken) {
-		return res.status(400).json({ msg: 'Refresh token is required' });
+		throw new ApiError('Refresh token is required', 400, 'REFRESH_TOKEN_REQUIRED');
 	}
 
-	try {
-		await revokeRefreshToken(refreshToken, { demo: isDemoMode() });
-		return res.json({ msg: 'Logged out' });
-	} catch (error) {
-		console.error(error);
-		return res.status(500).send('Server Error');
+	const demo = isDemoMode();
+	const userId = await consumeRefreshToken(refreshToken, { demo });
+	if (!userId) {
+		throw new ApiError('Invalid or expired refresh token', 401, 'REFRESH_TOKEN_INVALID');
 	}
-});
+
+	const user = demo ? getDemoUserById(userId) : await User.findById(userId);
+	if (!user) {
+		throw new ApiError('Invalid or expired refresh token', 401, 'REFRESH_TOKEN_INVALID');
+	}
+
+	return sendSuccess(res, await buildAuthPayload(user, demo));
+}));
+
+router.post('/logout', asyncHandler(async (req, res) => {
+	const { refreshToken } = req.body;
+	if (!refreshToken) {
+		throw new ApiError('Refresh token is required', 400, 'REFRESH_TOKEN_REQUIRED');
+	}
+
+	await revokeRefreshToken(refreshToken, { demo: isDemoMode() });
+	return sendSuccess(res, null, { message: 'Logged out' });
+}));
 
 module.exports = router;
