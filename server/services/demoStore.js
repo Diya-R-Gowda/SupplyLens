@@ -15,6 +15,7 @@ const createSeedSupplier = (orgId) => ({
   contractExpiry: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(),
   paymentTerms: 'Net 30',
   orgId: String(orgId),
+  createdAt: new Date().toISOString(),
 });
 
 const registerDemoSupplier = (supplier) => {
@@ -85,6 +86,7 @@ const upsertDemoSupplier = (orgId, supplier) => {
     contractExpiry: supplier.contractExpiry || null,
     paymentTerms: supplier.paymentTerms || '',
     orgId: orgKey,
+    createdAt: new Date().toISOString(),
   };
 
   const nextSuppliers = [...currentSuppliers, nextSupplier];

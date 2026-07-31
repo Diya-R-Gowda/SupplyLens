@@ -7,7 +7,7 @@ const supplierSchema = new mongoose.Schema({
   contractExpiry: Date,
   paymentTerms: { type: String, trim: true, maxlength: 100 },
   orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organisation', required: true }
-});
+}, { timestamps: true });
 
 // Every existing query filters by orgId (routes/suppliers.js); this compound index
 // covers those lookups as a prefix and also enforces one supplier name per org.
