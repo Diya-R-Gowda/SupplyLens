@@ -16,6 +16,7 @@ const createSeedSupplier = (orgId) => ({
   paymentTerms: 'Net 30',
   orgId: String(orgId),
   createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 });
 
 const registerDemoSupplier = (supplier) => {
@@ -87,6 +88,7 @@ const upsertDemoSupplier = (orgId, supplier) => {
     paymentTerms: supplier.paymentTerms || '',
     orgId: orgKey,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   const nextSuppliers = [...currentSuppliers, nextSupplier];
@@ -106,6 +108,7 @@ const updateDemoSupplier = (orgId, supplierId, updates) => {
   for (const field of ['name', 'category', 'country', 'contractExpiry', 'paymentTerms', 'riskScore']) {
     if (updates[field] !== undefined) updated[field] = updates[field];
   }
+  updated.updatedAt = new Date().toISOString();
 
   currentSuppliers[index] = updated;
   demoSuppliersByOrg.set(orgKey, currentSuppliers);

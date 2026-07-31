@@ -13,6 +13,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const roundToOneDecimal = (value) => Math.round(value * 10) / 10;
 
+const RECENT_ACTIVITY_LIMIT = 5;
+
 const dateKey = (date) => date.toISOString().slice(0, 10);
 
 // Always returns exactly 30 entries (oldest to newest, today last), zero-filled
@@ -65,12 +67,20 @@ const computeStatsFromList = (suppliers) => {
   }
   const growthSeries = mergeGrowthCounts(countsByDate);
 
+  const recentActivity = [...suppliers]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, RECENT_ACTIVITY_LIMIT)
+    .map((s) => ({
+      _id: s._id, name: s.name, category: s.category, riskScore: s.riskScore, updatedAt: s.updatedAt,
+    }));
+
   return {
     totalSuppliers,
     averageRiskScore,
     byCategory,
     newSuppliers: { last7Days, last30Days },
     growthSeries,
+    recentActivity,
   };
 };
 
@@ -106,6 +116,11 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
           { $match: { createdAt: { $gte: thirtyDaysAgo } } },
           { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
         ],
+        recentActivity: [
+          { $sort: { updatedAt: -1 } },
+          { $limit: RECENT_ACTIVITY_LIMIT },
+          { $project: { name: 1, category: 1, riskScore: 1, updatedAt: 1 } },
+        ],
       },
     },
   ]);
@@ -122,6 +137,7 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
       last30Days: result.last30Days[0]?.count || 0,
     },
     growthSeries: mergeGrowthCounts(countsByDate),
+    recentActivity: result.recentActivity,
   });
 }));
 

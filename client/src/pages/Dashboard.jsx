@@ -143,7 +143,7 @@ export default function Dashboard({ user, onLogout }) {
             </Button>
           </div>
 
-          <DashboardOverview stats={stats} loading={statsLoading} error={statsError} />
+          <DashboardOverview stats={stats} loading={statsLoading} error={statsError} onOpenSupplier={setSelectedSupplier} />
 
           <div className="flex flex-wrap gap-2.5">
             <input

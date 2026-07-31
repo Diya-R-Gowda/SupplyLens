@@ -1,8 +1,9 @@
 import StatCard from './StatCard';
 import CategoryDistributionChart from './CategoryDistributionChart';
 import SupplierGrowthChart from './SupplierGrowthChart';
+import RecentActivityFeed from './RecentActivityFeed';
 
-export default function DashboardOverview({ stats, loading, error }) {
+export default function DashboardOverview({ stats, loading, error, onOpenSupplier }) {
   if (loading) {
     return <p className="m-0 text-slate-600">Loading dashboard statistics...</p>;
   }
@@ -30,6 +31,8 @@ export default function DashboardOverview({ stats, loading, error }) {
         <CategoryDistributionChart byCategory={stats.byCategory} />
         <SupplierGrowthChart growthSeries={stats.growthSeries} />
       </div>
+
+      <RecentActivityFeed recentActivity={stats.recentActivity} onOpen={onOpenSupplier} />
     </div>
   );
 }
