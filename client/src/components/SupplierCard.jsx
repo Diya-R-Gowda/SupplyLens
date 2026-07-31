@@ -1,7 +1,11 @@
+import Card from './Card';
+import Badge from './Badge';
+
 export default function SupplierCard({ supplier, onOpen }) {
   return (
-    <article
-      className="grid gap-2.5 px-5 py-4.5 rounded-2xl bg-white/85 border border-slate-400/35 cursor-pointer"
+    <Card
+      as="article"
+      className="grid gap-2.5 px-5 py-4.5 rounded-2xl bg-white/85 cursor-pointer"
       onClick={() => onOpen?.(supplier)}
       role="button"
       tabIndex={0}
@@ -12,13 +16,13 @@ export default function SupplierCard({ supplier, onOpen }) {
       </div>
 
       <div className="flex flex-wrap gap-2.5 items-center">
-        <span className="inline-flex items-center rounded-full px-2.5 py-1.5 bg-blue-100 text-blue-700 font-bold text-[0.85rem]">
+        <Badge className="px-2.5 py-1.5 bg-blue-100 text-blue-700 text-[0.85rem]">
           Risk {supplier.riskScore ?? 0}
-        </span>
+        </Badge>
         {supplier.contractExpiry ? (
           <span className="text-slate-600 text-[0.9rem]">Expiry {new Date(supplier.contractExpiry).toLocaleDateString()}</span>
         ) : null}
       </div>
-    </article>
+    </Card>
   );
 }

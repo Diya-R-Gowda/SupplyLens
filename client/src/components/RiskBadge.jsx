@@ -1,3 +1,5 @@
+import Badge from './Badge';
+
 export const RiskBadge = ({ score }) => {
   const getColor = (s) => {
     if (s <= 33) return 'bg-green-100 text-green-800 border-green-200';
@@ -6,8 +8,8 @@ export const RiskBadge = ({ score }) => {
   };
 
   return (
-    <span className={`px-3 py-1 rounded-full border text-sm font-bold ${getColor(score)}`}>
+    <Badge className={`px-3 py-1 border text-sm ${getColor(score)}`}>
       {score} / 100
-    </span>
+    </Badge>
   );
 };
