@@ -36,8 +36,8 @@ export default function App() {
 	};
 
 	return (
-		<main style={styles.page}>
-			<section style={styles.card}>
+		<main className="min-h-screen m-0 grid place-items-center bg-[radial-gradient(circle_at_top,_#f3f7ff_0%,_#dfe9ff_45%,_#c8d7ff_100%)] font-sans">
+			<section className="w-[min(720px,calc(100vw-48px))] p-8 rounded-[28px] bg-white/78 shadow-[0_24px_80px_rgba(31,59,128,0.18)] backdrop-blur-[18px] border border-white/65">
 				{authed ? (
 					<Dashboard user={user} onLogout={handleLogout} />
 				) : (
@@ -47,23 +47,3 @@ export default function App() {
 		</main>
 	);
 }
-
-const styles = {
-	page: {
-		minHeight: '100vh',
-		margin: 0,
-		display: 'grid',
-		placeItems: 'center',
-		background: 'radial-gradient(circle at top, #f3f7ff 0%, #dfe9ff 45%, #c8d7ff 100%)',
-		fontFamily: 'Inter, system-ui, sans-serif',
-	},
-	card: {
-		width: 'min(720px, calc(100vw - 48px))',
-		padding: '32px',
-		borderRadius: '28px',
-		background: 'rgba(255, 255, 255, 0.78)',
-		boxShadow: '0 24px 80px rgba(31, 59, 128, 0.18)',
-		backdropFilter: 'blur(18px)',
-		border: '1px solid rgba(255, 255, 255, 0.65)',
-	},
-};

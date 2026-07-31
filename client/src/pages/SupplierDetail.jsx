@@ -31,6 +31,9 @@ const formFromSupplier = (supplier) => ({
   contractExpiry: toDateInputValue(supplier.contractExpiry),
 });
 
+const inputClass = 'border border-slate-300 rounded-xl px-3 py-2.5 text-[0.95rem] bg-white/92';
+const pillButtonClass = 'border border-slate-300 rounded-full bg-white/80 px-3.5 py-2.5 font-bold cursor-pointer';
+
 export default function SupplierDetail({ supplierId, user, onBack, onChanged }) {
   const [supplier, setSupplier] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -113,99 +116,112 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   };
 
   return (
-    <div style={styles.layout}>
-      <div style={styles.content}>
-        <div style={styles.topRow}>
-          <button onClick={onBack} type="button" style={styles.backButton}>Back</button>
+    <div className="flex min-h-[72vh] gap-4.5">
+      <div className="flex-1 grid gap-5 overflow-y-auto">
+        <div className="flex justify-between items-center gap-3">
+          <button onClick={onBack} type="button" className={pillButtonClass}>Back</button>
           <RiskBadge score={supplier.riskScore} />
         </div>
 
         {isEditing ? (
-          <form onSubmit={handleSave} style={styles.editForm}>
-            <label style={styles.label}>
+          <form onSubmit={handleSave} className="grid gap-3 p-5 rounded-[20px] bg-white/75 border border-slate-400/35">
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Name
-              <input value={form.name} onChange={handleFormChange('name')} style={styles.input} required />
+              <input value={form.name} onChange={handleFormChange('name')} className={inputClass} required />
             </label>
-            <label style={styles.label}>
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Category
-              <select value={form.category} onChange={handleFormChange('category')} style={styles.input}>
+              <select value={form.category} onChange={handleFormChange('category')} className={inputClass}>
                 <option value="">(none)</option>
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
             </label>
-            <label style={styles.label}>
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Country
-              <input value={form.country} onChange={handleFormChange('country')} style={styles.input} maxLength={2} required />
+              <input value={form.country} onChange={handleFormChange('country')} className={inputClass} maxLength={2} required />
             </label>
-            <label style={styles.label}>
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Payment terms
-              <input value={form.paymentTerms} onChange={handleFormChange('paymentTerms')} style={styles.input} />
+              <input value={form.paymentTerms} onChange={handleFormChange('paymentTerms')} className={inputClass} />
             </label>
-            <label style={styles.label}>
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Risk score (0-100)
               <input
                 value={form.riskScore}
                 onChange={handleFormChange('riskScore')}
-                style={styles.input}
+                className={inputClass}
                 type="number"
                 min="0"
                 max="100"
               />
             </label>
-            <label style={styles.label}>
+            <label className="grid gap-1.5 text-[0.9rem] font-semibold text-slate-800">
               Contract expiry
-              <input value={form.contractExpiry} onChange={handleFormChange('contractExpiry')} style={styles.input} type="date" />
+              <input value={form.contractExpiry} onChange={handleFormChange('contractExpiry')} className={inputClass} type="date" />
             </label>
 
-            {saveError ? <p style={styles.error}>{saveError}</p> : null}
+            {saveError ? <p className="m-0 text-red-700">{saveError}</p> : null}
 
-            <div style={styles.formActions}>
-              <button type="submit" style={styles.saveButton} disabled={saving}>
+            <div className="flex gap-2.5 mt-1">
+              <button
+                type="submit"
+                className="border-none rounded-full px-4 py-2.5 font-bold text-white bg-gradient-to-br from-blue-700 to-teal-700 cursor-pointer disabled:opacity-60"
+                disabled={saving}
+              >
                 {saving ? 'Saving...' : 'Save changes'}
               </button>
-              <button type="button" style={styles.cancelButton} onClick={cancelEditing} disabled={saving}>
+              <button type="button" className={pillButtonClass} onClick={cancelEditing} disabled={saving}>
                 Cancel
               </button>
             </div>
           </form>
         ) : (
           <>
-            <div style={styles.titleRow}>
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <h1 style={styles.title}>{supplier.name}</h1>
-                <p style={styles.subtitle}>{supplier.category} | {supplier.country}</p>
+                <h1 className="m-0 text-[clamp(1.8rem,4vw,2.8rem)] text-slate-900">{supplier.name}</h1>
+                <p className="mt-2 mb-0 text-slate-600">{supplier.category} | {supplier.country}</p>
               </div>
-              <div style={styles.actions}>
-                <button type="button" style={styles.editButton} onClick={startEditing}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" className={pillButtonClass} onClick={startEditing}>
                   Edit
                 </button>
                 {isAdmin ? (
                   confirmingDelete ? (
-                    <span style={styles.confirmRow}>
-                      <span style={styles.confirmText}>Delete this supplier?</span>
-                      <button type="button" style={styles.deleteConfirmButton} onClick={handleDelete} disabled={deleting}>
+                    <span className="flex items-center gap-2">
+                      <span className="text-red-700 text-[0.9rem] font-semibold">Delete this supplier?</span>
+                      <button
+                        type="button"
+                        className="border-none rounded-full bg-red-700 text-white px-3.5 py-2.5 font-bold cursor-pointer"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                      >
                         {deleting ? 'Deleting...' : 'Confirm'}
                       </button>
-                      <button type="button" style={styles.cancelButton} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                      <button type="button" className={pillButtonClass} onClick={() => setConfirmingDelete(false)} disabled={deleting}>
                         Cancel
                       </button>
                     </span>
                   ) : (
-                    <button type="button" style={styles.deleteButton} onClick={() => setConfirmingDelete(true)}>
+                    <button
+                      type="button"
+                      className="border border-red-300 rounded-full bg-red-50/90 text-red-700 px-3.5 py-2.5 font-bold cursor-pointer"
+                      onClick={() => setConfirmingDelete(true)}
+                    >
                       Delete
                     </button>
                   )
                 ) : null}
               </div>
             </div>
-            {deleteError ? <p style={styles.error}>{deleteError}</p> : null}
+            {deleteError ? <p className="m-0 text-red-700">{deleteError}</p> : null}
           </>
         )}
 
-        <section style={styles.panel}>
-          <h2 style={styles.panelTitle}>Document Vault</h2>
+        <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Document Vault</h2>
           <input
             type="file"
             onChange={async (event) => {
@@ -224,23 +240,26 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
               }
             }}
           />
-          {uploadStatus ? <p style={styles.status}>{uploadStatus}</p> : null}
+          {uploadStatus ? <p className="mt-2.5 mb-0 text-slate-600">{uploadStatus}</p> : null}
           {documents.length > 0 ? (
-            <div style={styles.docList}>
+            <div className="grid gap-2.5 mt-3.5">
               {documents.map((document) => (
-                <div key={document._id || document.fileName} style={styles.docItem}>
+                <div
+                  key={document._id || document.fileName}
+                  className="flex justify-between gap-3 px-3.5 py-3 rounded-[14px] bg-white/72 border border-slate-400/30 text-slate-900"
+                >
                   <span>{document.fileName}</span>
-                  <span style={styles.docMeta}>{document.uploadedAt ? new Date(document.uploadedAt).toLocaleString() : 'recent'}</span>
+                  <span className="text-slate-500 text-[0.9rem]">{document.uploadedAt ? new Date(document.uploadedAt).toLocaleString() : 'recent'}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p style={styles.status}>No documents uploaded yet.</p>
+            <p className="mt-2.5 mb-0 text-slate-600">No documents uploaded yet.</p>
           )}
         </section>
 
-        <section style={styles.panel}>
-          <h2 style={styles.panelTitle}>Latest Intelligence</h2>
+        <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Latest Intelligence</h2>
           <NewsPanel supplierId={supplierId} />
         </section>
       </div>
@@ -249,174 +268,3 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     </div>
   );
 }
-
-const styles = {
-  layout: {
-    display: 'flex',
-    minHeight: '72vh',
-    gap: '18px',
-  },
-  content: {
-    flex: 1,
-    display: 'grid',
-    gap: '20px',
-    overflowY: 'auto',
-  },
-  topRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  backButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  titleRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-  },
-  title: {
-    margin: 0,
-    fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
-    color: '#0f172a',
-  },
-  subtitle: {
-    margin: '8px 0 0',
-    color: '#475569',
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  editButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  deleteButton: {
-    border: '1px solid #fca5a5',
-    borderRadius: '999px',
-    background: 'rgba(254,242,242,0.9)',
-    color: '#b91c1c',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  confirmRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  confirmText: {
-    color: '#b91c1c',
-    fontSize: '0.9rem',
-    fontWeight: 600,
-  },
-  deleteConfirmButton: {
-    border: 'none',
-    borderRadius: '999px',
-    background: '#b91c1c',
-    color: 'white',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  cancelButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  editForm: {
-    display: 'grid',
-    gap: '12px',
-    padding: '20px',
-    borderRadius: '20px',
-    background: 'rgba(255,255,255,0.75)',
-    border: '1px solid rgba(148,163,184,0.35)',
-  },
-  label: {
-    display: 'grid',
-    gap: '6px',
-    fontSize: '0.9rem',
-    fontWeight: 600,
-    color: '#1e293b',
-  },
-  input: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '10px 12px',
-    fontSize: '0.95rem',
-    background: 'rgba(255,255,255,0.92)',
-  },
-  formActions: {
-    display: 'flex',
-    gap: '10px',
-    marginTop: '4px',
-  },
-  saveButton: {
-    border: 'none',
-    borderRadius: '999px',
-    padding: '10px 16px',
-    fontWeight: 700,
-    color: 'white',
-    background: 'linear-gradient(135deg, #1d4ed8 0%, #0f766e 100%)',
-    cursor: 'pointer',
-  },
-  panel: {
-    borderRadius: '20px',
-    padding: '20px',
-    background: 'rgba(255,255,255,0.75)',
-    border: '1px solid rgba(148,163,184,0.35)',
-  },
-  panelTitle: {
-    margin: '0 0 12px',
-    fontSize: '1.1rem',
-    color: '#0f172a',
-  },
-  status: {
-    margin: '10px 0 0',
-    color: '#475569',
-  },
-  error: {
-    margin: 0,
-    color: '#b91c1c',
-  },
-  copy: {
-    margin: 0,
-    color: '#475569',
-  },
-  docList: {
-    display: 'grid',
-    gap: '10px',
-    marginTop: '14px',
-  },
-  docItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '12px 14px',
-    borderRadius: '14px',
-    background: 'rgba(255,255,255,0.72)',
-    border: '1px solid rgba(148,163,184,0.3)',
-    color: '#0f172a',
-  },
-  docMeta: {
-    color: '#64748b',
-    fontSize: '0.9rem',
-  },
-};

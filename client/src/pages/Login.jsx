@@ -26,47 +26,53 @@ export default function Login({ onSuccess }) {
   };
 
   return (
-    <div style={styles.shell}>
-      <p style={styles.kicker}>SupplyLens</p>
-      <h1 style={styles.title}>{isRegister ? 'Create your supplier workspace' : 'Sign in to your supplier workspace'}</h1>
-      <p style={styles.copy}>
+    <div className="grid gap-4">
+      <p className="m-0 uppercase tracking-[0.18em] text-xs font-bold text-[#3853b5]">SupplyLens</p>
+      <h1 className="m-0 text-[clamp(2rem,4vw,3.4rem)] leading-[1.02] text-slate-900">
+        {isRegister ? 'Create your supplier workspace' : 'Sign in to your supplier workspace'}
+      </h1>
+      <p className="m-0 max-w-[58ch] text-base leading-[1.7] text-slate-600">
         {isRegister
           ? 'Register a new workspace with an email and password.'
           : 'Sign in with your existing email and password.'}
       </p>
 
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <label style={styles.label}>
+      <form onSubmit={handleSubmit} className="grid gap-3.5 mt-2">
+        <label className="grid gap-2 text-[0.92rem] font-semibold text-slate-800">
           Email
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            style={styles.input}
+            className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
             type="email"
             autoComplete="email"
           />
         </label>
 
-        <label style={styles.label}>
+        <label className="grid gap-2 text-[0.92rem] font-semibold text-slate-800">
           Password
           <input
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            style={styles.input}
+            className="border border-slate-300 rounded-2xl px-4 py-3.5 text-base outline-none bg-white/92"
             type="password"
             autoComplete={isRegister ? 'new-password' : 'current-password'}
           />
         </label>
 
-        {error ? <p style={styles.error}>{error}</p> : null}
+        {error ? <p className="m-0 text-red-700 text-[0.95rem]">{error}</p> : null}
 
-        <button type="submit" style={styles.button} disabled={loading}>
+        <button
+          type="submit"
+          className="mt-1.5 border-none rounded-2xl px-[18px] py-3.5 text-base font-bold text-white bg-gradient-to-br from-blue-700 to-teal-700 cursor-pointer disabled:opacity-60"
+          disabled={loading}
+        >
           {loading ? 'Please wait...' : isRegister ? 'Create account' : 'Continue'}
         </button>
 
         <button
           type="button"
-          style={styles.toggle}
+          className="mt-0.5 border-none bg-transparent text-[#3853b5] font-semibold text-[0.9rem] cursor-pointer text-center"
           onClick={() => {
             setMode(isRegister ? 'login' : 'register');
             setError('');
@@ -78,77 +84,3 @@ export default function Login({ onSuccess }) {
     </div>
   );
 }
-
-const styles = {
-  shell: {
-    display: 'grid',
-    gap: '16px',
-  },
-  kicker: {
-    margin: 0,
-    textTransform: 'uppercase',
-    letterSpacing: '0.18em',
-    fontSize: '12px',
-    fontWeight: 700,
-    color: '#3853b5',
-  },
-  title: {
-    margin: 0,
-    fontSize: 'clamp(2rem, 4vw, 3.4rem)',
-    lineHeight: 1.02,
-    color: '#0f172a',
-  },
-  copy: {
-    margin: 0,
-    maxWidth: '58ch',
-    fontSize: '1rem',
-    lineHeight: 1.7,
-    color: '#475569',
-  },
-  form: {
-    display: 'grid',
-    gap: '14px',
-    marginTop: '8px',
-  },
-  label: {
-    display: 'grid',
-    gap: '8px',
-    fontSize: '0.92rem',
-    fontWeight: 600,
-    color: '#1e293b',
-  },
-  input: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '14px',
-    padding: '14px 16px',
-    fontSize: '1rem',
-    outline: 'none',
-    background: 'rgba(255,255,255,0.92)',
-  },
-  error: {
-    margin: 0,
-    color: '#b91c1c',
-    fontSize: '0.95rem',
-  },
-  button: {
-    marginTop: '6px',
-    border: 'none',
-    borderRadius: '14px',
-    padding: '14px 18px',
-    fontSize: '1rem',
-    fontWeight: 700,
-    color: 'white',
-    background: 'linear-gradient(135deg, #1d4ed8 0%, #0f766e 100%)',
-    cursor: 'pointer',
-  },
-  toggle: {
-    marginTop: '2px',
-    border: 'none',
-    background: 'none',
-    color: '#3853b5',
-    fontWeight: 600,
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    textAlign: 'center',
-  },
-};

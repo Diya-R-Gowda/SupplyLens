@@ -84,7 +84,7 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   return (
-    <div style={styles.shell}>
+    <div className="grid gap-5">
       {selectedSupplier ? (
         <SupplierDetail
           supplierId={selectedSupplier._id}
@@ -94,22 +94,26 @@ export default function Dashboard({ user, onLogout }) {
         />
       ) : (
         <>
-          <div style={styles.header}>
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <p style={styles.kicker}>Live API data</p>
-              <h1 style={styles.title}>Supplier dashboard</h1>
+              <p className="m-0 uppercase tracking-[0.18em] text-xs font-bold text-[#3853b5]">Live API data</p>
+              <h1 className="mt-2 mb-0 text-[clamp(1.8rem,4vw,2.8rem)] leading-[1.05] text-slate-900">Supplier dashboard</h1>
             </div>
-            <button onClick={onLogout} style={styles.logout} type="button">
+            <button
+              onClick={onLogout}
+              className="border border-slate-300 rounded-full bg-white/80 px-3.5 py-2.5 font-bold cursor-pointer"
+              type="button"
+            >
               Sign out
             </button>
           </div>
 
-          <div style={styles.controls}>
+          <div className="flex flex-wrap gap-2.5">
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Search by name..."
-              style={styles.searchInput}
+              className="flex-[1_1_220px] border border-slate-300 rounded-xl px-3.5 py-2.5 text-[0.95rem] bg-white/92"
               type="search"
             />
             <select
@@ -118,7 +122,7 @@ export default function Dashboard({ user, onLogout }) {
                 setCategory(event.target.value);
                 setPage(1);
               }}
-              style={styles.select}
+              className="border border-slate-300 rounded-xl px-3.5 py-2.5 text-[0.95rem] bg-white/92"
             >
               {CATEGORY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -131,45 +135,45 @@ export default function Dashboard({ user, onLogout }) {
                 setPage(1);
               }}
               placeholder="Country (e.g. US)"
-              style={styles.countryInput}
+              className="w-[110px] border border-slate-300 rounded-xl px-3.5 py-2.5 text-[0.95rem] uppercase bg-white/92"
               maxLength={2}
             />
           </div>
 
-          {loading ? <p style={styles.status}>Loading suppliers...</p> : null}
-          {error ? <p style={styles.error}>{error}</p> : null}
+          {loading ? <p className="m-0 text-slate-600">Loading suppliers...</p> : null}
+          {error ? <p className="m-0 text-red-700">{error}</p> : null}
 
           {!loading && !error && suppliers.length === 0 ? (
-            <div style={styles.empty}>
-              <h2 style={styles.emptyTitle}>No suppliers found</h2>
-              <p style={styles.emptyCopy}>Nothing matches the current search/filters, or this workspace has no suppliers yet.</p>
+            <div className="border border-dashed border-slate-400 rounded-[20px] p-6 bg-white/55">
+              <h2 className="m-0 text-[1.2rem] text-slate-900">No suppliers found</h2>
+              <p className="mt-2 mb-0 text-slate-600 leading-[1.7]">Nothing matches the current search/filters, or this workspace has no suppliers yet.</p>
             </div>
           ) : null}
 
-          <div style={styles.grid}>
+          <div className="grid gap-3.5">
             {suppliers.map((supplier) => (
               <SupplierCard key={supplier._id || supplier.name} supplier={supplier} onOpen={setSelectedSupplier} />
             ))}
           </div>
 
           {!loading && pagination.total > 0 ? (
-            <div style={styles.pagination}>
+            <div className="flex items-center justify-center gap-3.5">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
                 disabled={pagination.page <= 1}
-                style={styles.pageButton}
+                className="border border-slate-300 rounded-full bg-white/80 px-4 py-2 font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
-              <span style={styles.pageStatus}>
+              <span className="text-slate-600 text-[0.9rem]">
                 Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
               </span>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.min(p + 1, pagination.totalPages))}
                 disabled={pagination.page >= pagination.totalPages}
-                style={styles.pageButton}
+                className="border border-slate-300 rounded-full bg-white/80 px-4 py-2 font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>
@@ -180,113 +184,3 @@ export default function Dashboard({ user, onLogout }) {
     </div>
   );
 }
-
-const styles = {
-  shell: {
-    display: 'grid',
-    gap: '20px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '16px',
-  },
-  kicker: {
-    margin: 0,
-    textTransform: 'uppercase',
-    letterSpacing: '0.18em',
-    fontSize: '12px',
-    fontWeight: 700,
-    color: '#3853b5',
-  },
-  title: {
-    margin: '8px 0 0',
-    fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
-    lineHeight: 1.05,
-    color: '#0f172a',
-  },
-  logout: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '10px 14px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  controls: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '10px',
-  },
-  searchInput: {
-    flex: '1 1 220px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '10px 14px',
-    fontSize: '0.95rem',
-    background: 'rgba(255,255,255,0.92)',
-  },
-  select: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '10px 14px',
-    fontSize: '0.95rem',
-    background: 'rgba(255,255,255,0.92)',
-  },
-  countryInput: {
-    width: '110px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '10px 14px',
-    fontSize: '0.95rem',
-    textTransform: 'uppercase',
-    background: 'rgba(255,255,255,0.92)',
-  },
-  status: {
-    margin: 0,
-    color: '#475569',
-  },
-  error: {
-    margin: 0,
-    color: '#b91c1c',
-  },
-  empty: {
-    border: '1px dashed #94a3b8',
-    borderRadius: '20px',
-    padding: '24px',
-    background: 'rgba(255,255,255,0.55)',
-  },
-  emptyTitle: {
-    margin: 0,
-    fontSize: '1.2rem',
-    color: '#0f172a',
-  },
-  emptyCopy: {
-    margin: '8px 0 0',
-    color: '#475569',
-    lineHeight: 1.7,
-  },
-  grid: {
-    display: 'grid',
-    gap: '14px',
-  },
-  pagination: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '14px',
-  },
-  pageButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.8)',
-    padding: '8px 16px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  pageStatus: {
-    color: '#475569',
-    fontSize: '0.9rem',
-  },
-};
