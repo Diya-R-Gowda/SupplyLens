@@ -1,0 +1,1 @@
+Demo contract text for upload testing.
