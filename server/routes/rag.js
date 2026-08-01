@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const { answerSupplierQuestion } = require('../services/ragService');
 const mongoose = require('mongoose');
+const Supplier = require('../models/Supplier');
 const { answerDemoQuestion } = require('../services/demoStore');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
@@ -21,7 +22,8 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *       another's answer), then asks gemini-flash-latest to answer using only the retrieved
  *       chunks as context. Returns a fixed "couldn't find any information" message (not an error)
  *       if no chunks match. In demo mode it always returns a canned, keyword-matched answer with
- *       no real AI call.
+ *       no real AI call. Org-scoped like every other supplier-facing route - a supplier belonging
+ *       to a different org 404s rather than leaking whether it exists.
  *     tags: [RAG]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -58,6 +60,15 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *             example:
  *               success: false
  *               error: { message: Question is required, code: QUESTION_REQUIRED }
+ *       404:
+ *         description: No such supplier in the caller's org (real mode only - demo mode has no org-scoped supplier store)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  *       500:
  *         description: The RAG pipeline failed (embedding call, vector search, or generation) - never silently reported as a fake answer
  *         content:
@@ -78,6 +89,14 @@ router.post('/:supplierId', auth, asyncHandler(async (req, res) => {
 
   if (isDemoMode()) {
     return sendSuccess(res, { answer: answerDemoQuestion(supplierId, question) });
+  }
+
+  // Same org-scoped, 404-not-403 pattern as suppliers.js/documents.js: without
+  // this, any authenticated user could pull answers sourced from another
+  // org's documents just by guessing/knowing a supplierId.
+  const supplier = await Supplier.findOne({ _id: supplierId, orgId: req.user.orgId });
+  if (!supplier) {
+    throw new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
   }
 
   // No catch-and-fake-answer here: if the RAG pipeline fails (Gemini API
