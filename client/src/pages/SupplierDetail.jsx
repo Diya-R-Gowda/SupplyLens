@@ -8,6 +8,7 @@ import Input from '../components/Input';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
 import Badge from '../components/Badge';
+import Timeline from '../components/Timeline';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -43,6 +44,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [supplier, setSupplier] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [documents, setDocuments] = useState([]);
+  const [timeline, setTimeline] = useState([]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -58,10 +60,16 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
 
   const isAdmin = user?.role === 'admin';
 
+  const loadTimeline = () => {
+    api.get(`/suppliers/${supplierId}/timeline`).then((res) => setTimeline(res.data.data || [])).catch(() => setTimeline([]));
+  };
+
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
     api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data.data || [])).catch(() => setDocuments([]));
+    loadTimeline();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
   if (!supplier) return <p>Loading...</p>;
@@ -98,6 +106,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       const response = await api.put(`/suppliers/${supplierId}`, payload);
       setSupplier(response.data.data);
       setIsEditing(false);
+      loadTimeline();
       onChanged?.();
     } catch (requestError) {
       const details = requestError?.response?.data?.error?.details;
@@ -114,6 +123,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     try {
       const response = await api.post(`/suppliers/${supplierId}/enrich`);
       setSupplier((prev) => ({ ...prev, enrichment: response.data.data }));
+      loadTimeline();
     } catch (requestError) {
       setEnrichError(requestError?.response?.data?.error?.message || 'Unable to enrich supplier data.');
     } finally {
@@ -254,6 +264,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 setUploadStatus(response.data.data?.demo ? 'Uploaded in demo mode.' : 'Document ingested and embedded!');
                 const latestDocuments = await api.get(`/documents/${supplierId}`);
                 setDocuments(latestDocuments.data.data || []);
+                loadTimeline();
               } catch (uploadError) {
                 setUploadStatus(uploadError?.response?.data?.error?.message || 'Failed to process document.');
               }
@@ -310,6 +321,11 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
           <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Latest Intelligence</h2>
           <NewsPanel supplierId={supplierId} />
+        </section>
+
+        <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Timeline</h2>
+          <Timeline events={timeline} />
         </section>
       </div>
 
