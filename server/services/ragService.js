@@ -6,6 +6,14 @@ const mongoose = require('mongoose');
 const formatHistory = (history) =>
   history.map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
 
+// 8 messages = last 4 user/assistant exchanges. A follow-up like "why is it
+// that high?" almost always refers to the immediately preceding answer, not
+// something from ten turns ago - capping keeps prompt size (and Gemini token
+// cost) bounded regardless of how long a conversation runs, while still
+// leaving enough room for a short multi-step clarification thread rather
+// than truncating mid-exchange after every single question.
+const HISTORY_WINDOW = 8;
+
 // history is the conversation's prior turns (this question is not in it yet) -
 // used so a follow-up like "why is it that high?" can resolve against what was
 // just discussed, not just the freshly retrieved document chunks.
@@ -45,7 +53,8 @@ exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
 
   // 3. Build the Prompt
   const contextText = contextChunks.map(c => c.text).join("\n\n");
-  const historyText = history.length ? formatHistory(history) : '(no prior messages)';
+  const recentHistory = history.slice(-HISTORY_WINDOW);
+  const historyText = recentHistory.length ? formatHistory(recentHistory) : '(no prior messages)';
   const finalPrompt = `
     You are a contract analyst for SupplyLens.
     Answer the question using ONLY the provided context from the supplier's documents.
