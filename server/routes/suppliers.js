@@ -8,6 +8,7 @@ const Supplier = require('../models/Supplier');
 const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
+const { enrichSupplierData } = require('../services/enrichmentService');
 const mongoose = require('mongoose');
 const {
   listDemoSuppliers,
@@ -739,6 +740,83 @@ router.get('/:id/conversations', auth, asyncHandler(async (req, res) => {
     .lean();
 
   return sendSuccess(res, conversations);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/enrich:
+ *   post:
+ *     summary: Populate AI-generated company enrichment for a supplier
+ *     description: >
+ *       Prompts Gemini to research the supplier's name and returns industry, company size, founding
+ *       year, and a short summary. **This is AI-generated, not a verified data source** - the
+ *       response can be wrong or hallucinated, and the UI must present it as unverified rather than
+ *       fact. Re-runnable: calling this again overwrites the previous enrichment and updates
+ *       `enrichedAt`, so it's meant to be refreshed periodically rather than treated as permanent.
+ *       Not available in demo mode (no real Gemini call happens there).
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Enrichment populated and saved on the supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 industry: Automotive manufacturing
+ *                 companySize: 100,000+ employees
+ *                 foundedYear: 2003
+ *                 summary: Designs and manufactures electric vehicles and energy storage systems.
+ *                 source: gemini
+ *                 enrichedAt: '2026-08-02T12:00:00.000Z'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Enrichment is not available in demo mode, code: DEMO_MODE_UNSUPPORTED }
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Internal server error, code: INTERNAL_ERROR }
+ */
+router.post('/:id/enrich', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Enrichment is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const enrichment = await enrichSupplierData(supplier.name);
+  supplier.enrichment = enrichment;
+  await supplier.save();
+
+  return sendSuccess(res, enrichment);
 }));
 
 module.exports = router;
