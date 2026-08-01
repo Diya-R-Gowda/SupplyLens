@@ -84,6 +84,55 @@ const computeStatsFromList = (suppliers) => {
   };
 };
 
+/**
+ * @swagger
+ * /dashboard/stats:
+ *   get:
+ *     summary: Aggregated supplier statistics for the caller's organisation
+ *     description: >
+ *       Computed with a single MongoDB aggregation ($facet), not by fetching all suppliers and
+ *       reducing client-side. growthSeries always has exactly 30 entries (oldest first, today
+ *       last), zero-filled for days with no new suppliers. recentActivity is the 5 most recently
+ *       updated suppliers (by updatedAt, so an edit surfaces a supplier here just like a create does).
+ *     tags: [Dashboard]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Statistics for the caller's organisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 totalSuppliers: 6
+ *                 averageRiskScore: 47.3
+ *                 byCategory:
+ *                   - { category: logistics, count: 3 }
+ *                   - { category: raw_material, count: 1 }
+ *                   - { category: saas, count: 1 }
+ *                   - { category: other, count: 1 }
+ *                 newSuppliers: { last7Days: 6, last30Days: 6 }
+ *                 growthSeries:
+ *                   - { date: '2026-07-31', count: 6 }
+ *                   - { date: '2026-08-01', count: 0 }
+ *                 recentActivity:
+ *                   - _id: 6a6cf19ef857b1ef1c7001e6
+ *                     name: Dash Test Supplier 5
+ *                     category: other
+ *                     riskScore: 90
+ *                     updatedAt: '2026-07-31T19:03:58.527Z'
+ *       401:
+ *         description: Missing, malformed, or expired access token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Token has expired, code: TOKEN_EXPIRED }
+ */
 router.get('/stats', auth, asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     const suppliers = listDemoSuppliers(req.user.orgId);
