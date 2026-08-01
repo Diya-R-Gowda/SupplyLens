@@ -6,6 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const Supplier = require('../models/Supplier');
 const Document = require('../models/Document');
+const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const mongoose = require('mongoose');
 const {
@@ -676,6 +677,68 @@ router.get('/:id/documents/:docId/file', auth, asyncHandler(async (req, res, nex
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `inline; filename="${document.fileName}"`);
   downloadStream.pipe(res);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/conversations:
+ *   get:
+ *     summary: List the caller's past RAG conversations for a supplier
+ *     description: >
+ *       Conversations are private per-user - this only ever returns conversations started by the
+ *       calling user, never another org member's, even though both would pass the org check. Most
+ *       recently updated first. Demo mode always returns an empty array, since no conversation is
+ *       persisted there. Org-scoped like every other supplier-facing route - a supplier belonging
+ *       to a different org 404s rather than leaking whether it exists.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Supplier id
+ *     responses:
+ *       200:
+ *         description: The caller's conversations for this supplier, most recently updated first
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 - _id: 6a6cf137f857b1ef1c7004a2
+ *                   supplierId: 6a6cf137f857b1ef1c7001e2
+ *                   messages:
+ *                     - { role: user, content: "What's their risk score?", timestamp: '2026-08-01T19:00:00.000Z' }
+ *                     - { role: assistant, content: 'Their risk score is 72.', timestamp: '2026-08-01T19:00:02.000Z', sources: [msa-2026.pdf] }
+ *                   createdAt: '2026-08-01T19:00:00.000Z'
+ *                   updatedAt: '2026-08-01T19:00:02.000Z'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ */
+router.get('/:id/conversations', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, []);
+  }
+
+  await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const conversations = await Conversation.find({
+    supplierId: req.params.id, orgId: req.user.orgId, userId: req.user.id,
+  })
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  return sendSuccess(res, conversations);
 }));
 
 module.exports = router;
