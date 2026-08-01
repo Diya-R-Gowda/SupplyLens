@@ -205,9 +205,11 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 <p className="mt-2 mb-0 text-slate-600">{supplier.category} | {supplier.country}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button className={pillButtonClass} onClick={startEditing}>
-                  Edit
-                </Button>
+                {isAdmin ? (
+                  <Button className={pillButtonClass} onClick={startEditing}>
+                    Edit
+                  </Button>
+                ) : null}
                 {isAdmin ? (
                   <Button variant="danger" className="rounded-full px-3.5 py-2.5" onClick={() => setConfirmingDelete(true)}>
                     Delete

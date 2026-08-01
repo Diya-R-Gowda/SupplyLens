@@ -396,12 +396,11 @@ const updateHandler = asyncHandler(async (req, res) => {
  * @swagger
  * /suppliers/{id}:
  *   put:
- *     summary: Update a supplier (no admin restriction - any authenticated org member)
+ *     summary: Update a supplier (admin only)
  *     description: >
  *       PUT and PATCH are handled identically by the same code path here: every field is
  *       optional, and only the fields present in the body are changed - omitted fields are
- *       left as-is. Unlike create/delete, this endpoint has no requireRole check, so a viewer
- *       can update a supplier just like an admin can.
+ *       left as-is.
  *     tags: [Suppliers]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -452,6 +451,15 @@ const updateHandler = asyncHandler(async (req, res) => {
  *                 message: Validation failed
  *                 code: VALIDATION_ERROR
  *                 details: { riskScore: 'Risk score must be between 0 and 100' }
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Forbidden: insufficient permissions', code: FORBIDDEN }
  *       404:
  *         description: No supplier with that id in the caller's organisation
  *         content:
@@ -462,7 +470,7 @@ const updateHandler = asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  *   patch:
- *     summary: Same as PUT /suppliers/{id} - both are handled by the identical code path
+ *     summary: Same as PUT /suppliers/{id} - both are handled by the identical code path (admin only)
  *     tags: [Suppliers]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -497,6 +505,12 @@ const updateHandler = asyncHandler(async (req, res) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
  *       404:
  *         description: No supplier with that id in the caller's organisation
  *         content:
@@ -504,9 +518,9 @@ const updateHandler = asyncHandler(async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorEnvelope'
  */
-// Update a supplier, scoped to the requester's org
-router.put('/:id', auth, validate(updateSupplierValidation), updateHandler);
-router.patch('/:id', auth, validate(updateSupplierValidation), updateHandler);
+// Update a supplier, scoped to the requester's org (admin only, matching create/delete)
+router.put('/:id', auth, requireRole('admin'), validate(updateSupplierValidation), updateHandler);
+router.patch('/:id', auth, requireRole('admin'), validate(updateSupplierValidation), updateHandler);
 
 /**
  * @swagger
