@@ -103,6 +103,70 @@ const buildPaginationMeta = (total, page, limit) => ({
 // an enum, country is a normalized 2-letter code - are the natural exact-match
 // filters. riskScore/contractExpiry are more naturally range queries than
 // filters and aren't asked for here.
+/**
+ * @swagger
+ * /suppliers:
+ *   get:
+ *     summary: List suppliers in the caller's organisation
+ *     description: >
+ *       Search is a case-insensitive substring match against name (not a whole-word text-index
+ *       match, so partial terms like "orth" match "Northwind"). category and country are exact
+ *       filters. Results are always scoped to the caller's own organisation.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Case-insensitive substring match against supplier name.
+ *         example: north
+ *       - in: query
+ *         name: category
+ *         schema: { type: string, enum: [raw_material, logistics, saas, other] }
+ *       - in: query
+ *         name: country
+ *         schema: { type: string }
+ *         description: Exact match; normalized to uppercase. 2-letter ISO code.
+ *         example: US
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+ *         description: Silently clamped to 100 even if a higher value is requested.
+ *     responses:
+ *       200:
+ *         description: Page of suppliers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 - _id: 6a6cf137f857b1ef1c7001e2
+ *                   name: Northwind Logistics
+ *                   category: logistics
+ *                   country: US
+ *                   riskScore: 34
+ *                   contractExpiry: '2026-10-30T00:00:00.000Z'
+ *                   paymentTerms: Net 30
+ *                   orgId: 6a6cf137f857b1ef1c7001d5
+ *                   createdAt: '2026-07-31T19:02:15.518Z'
+ *                   updatedAt: '2026-07-31T19:02:15.518Z'
+ *               meta:
+ *                 pagination: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ *       401:
+ *         description: Missing, malformed, or expired access token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Token has expired, code: TOKEN_EXPIRED }
+ */
 router.get('/', auth, asyncHandler(async (req, res) => {
   const { search, category, country } = req.query;
   const { page, limit } = parsePagination(req.query.page, req.query.limit);
@@ -138,7 +202,84 @@ router.get('/', auth, asyncHandler(async (req, res) => {
   return sendSuccess(res, suppliers, { meta: buildPaginationMeta(total, page, limit) });
 }));
 
-// Create a supplier (admin only)
+/**
+ * @swagger
+ * /suppliers:
+ *   post:
+ *     summary: Create a supplier (admin only)
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, country]
+ *             properties:
+ *               name: { type: string, maxLength: 200, example: Acme Freight Co }
+ *               country: { type: string, description: 2-letter ISO code, example: GB }
+ *               category: { type: string, enum: [raw_material, logistics, saas, other] }
+ *               riskScore: { type: number, minimum: 0, maximum: 100, example: 42 }
+ *               paymentTerms: { type: string, maxLength: 100, example: Net 45 }
+ *               contractExpiry:
+ *                 type: string
+ *                 format: date-time
+ *                 nullable: true
+ *                 description: Past dates are accepted (an already-lapsed contract is valid data, not bad input).
+ *                 example: '2026-12-31'
+ *     responses:
+ *       201:
+ *         description: Supplier created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 _id: 6a6d971f13f9bbf357979799
+ *                 name: Acme Freight Co
+ *                 category: logistics
+ *                 country: GB
+ *                 riskScore: 42
+ *                 orgId: 6a6d971e13f9bbf357979795
+ *                 createdAt: '2026-08-01T06:50:07.398Z'
+ *                 updatedAt: '2026-08-01T06:50:07.398Z'
+ *       400:
+ *         description: A field failed validation (see "details", keyed by field name)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error:
+ *                 message: Validation failed
+ *                 code: VALIDATION_ERROR
+ *                 details: { country: 'Country must be a 2-letter ISO code (e.g. US)' }
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Forbidden: insufficient permissions', code: FORBIDDEN }
+ *       409:
+ *         description: Another supplier in this org already has this exact name (name is unique per org)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error:
+ *                 message: 'A record with that orgId, name already exists'
+ *                 code: DUPLICATE_KEY
+ *                 details: { fields: [orgId, name] }
+ */
 router.post('/', auth, requireRole('admin'), validate(createSupplierValidation), asyncHandler(async (req, res) => {
   const { name, category, country, contractExpiry, paymentTerms, riskScore } = req.body;
 
@@ -155,6 +296,62 @@ router.post('/', auth, requireRole('admin'), validate(createSupplierValidation),
   return sendSuccess(res, supplier, { status: 201 });
 }));
 
+/**
+ * @swagger
+ * /suppliers/{id}:
+ *   get:
+ *     summary: Get a single supplier by id
+ *     description: >
+ *       A malformed id (not a valid ObjectId shape) 400s, while a well-formed id that doesn't
+ *       exist - or belongs to a different organisation - 404s identically, so callers can never
+ *       tell "wrong org" apart from "doesn't exist" from the response alone.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6a6cf137f857b1ef1c7001e2
+ *     responses:
+ *       200:
+ *         description: Supplier found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 _id: 6a6cf137f857b1ef1c7001e2
+ *                 name: Northwind Logistics
+ *                 category: logistics
+ *                 country: US
+ *                 riskScore: 34
+ *                 contractExpiry: '2026-10-30T00:00:00.000Z'
+ *                 paymentTerms: Net 30
+ *                 orgId: 6a6cf137f857b1ef1c7001d5
+ *                 createdAt: '2026-07-31T19:02:15.518Z'
+ *                 updatedAt: '2026-07-31T19:02:15.518Z'
+ *       400:
+ *         description: id is not a validly-shaped ObjectId
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Invalid _id: not-an-id', code: INVALID_ID }
+ *       404:
+ *         description: No supplier with that id in the caller's organisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ */
 router.get('/:id', auth, asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     const supplier = getDemoSupplier(req.params.id);
@@ -195,10 +392,174 @@ const updateHandler = asyncHandler(async (req, res) => {
   return sendSuccess(res, updated);
 });
 
+/**
+ * @swagger
+ * /suppliers/{id}:
+ *   put:
+ *     summary: Update a supplier (no admin restriction - any authenticated org member)
+ *     description: >
+ *       PUT and PATCH are handled identically by the same code path here: every field is
+ *       optional, and only the fields present in the body are changed - omitted fields are
+ *       left as-is. Unlike create/delete, this endpoint has no requireRole check, so a viewer
+ *       can update a supplier just like an admin can.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6a6cf137f857b1ef1c7001e2
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, maxLength: 200 }
+ *               country: { type: string, description: 2-letter ISO code }
+ *               category: { type: string, enum: [raw_material, logistics, saas, other] }
+ *               riskScore: { type: number, minimum: 0, maximum: 100, example: 55 }
+ *               paymentTerms: { type: string, maxLength: 100 }
+ *               contractExpiry: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       200:
+ *         description: Updated supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 _id: 6a6cf137f857b1ef1c7001e2
+ *                 name: Northwind Logistics
+ *                 category: logistics
+ *                 country: US
+ *                 riskScore: 55
+ *                 orgId: 6a6cf137f857b1ef1c7001d5
+ *                 updatedAt: '2026-08-01T07:10:00.000Z'
+ *       400:
+ *         description: A field failed validation, or id is not a validly-shaped ObjectId
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error:
+ *                 message: Validation failed
+ *                 code: VALIDATION_ERROR
+ *                 details: { riskScore: 'Risk score must be between 0 and 100' }
+ *       404:
+ *         description: No supplier with that id in the caller's organisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ *   patch:
+ *     summary: Same as PUT /suppliers/{id} - both are handled by the identical code path
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6a6cf137f857b1ef1c7001e2
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, maxLength: 200 }
+ *               country: { type: string, description: 2-letter ISO code }
+ *               category: { type: string, enum: [raw_material, logistics, saas, other] }
+ *               riskScore: { type: number, minimum: 0, maximum: 100 }
+ *               paymentTerms: { type: string, maxLength: 100 }
+ *               contractExpiry: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       200:
+ *         description: Updated supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: A field failed validation, or id is not a validly-shaped ObjectId
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No supplier with that id in the caller's organisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
 // Update a supplier, scoped to the requester's org
 router.put('/:id', auth, validate(updateSupplierValidation), updateHandler);
 router.patch('/:id', auth, validate(updateSupplierValidation), updateHandler);
 
+/**
+ * @swagger
+ * /suppliers/{id}:
+ *   delete:
+ *     summary: Delete a supplier (admin only)
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6a6cf137f857b1ef1c7001e2
+ *     responses:
+ *       200:
+ *         description: Supplier deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data: null
+ *               message: Supplier deleted
+ *       400:
+ *         description: id is not a validly-shaped ObjectId
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Invalid _id: not-an-id', code: INVALID_ID }
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Forbidden: insufficient permissions', code: FORBIDDEN }
+ *       404:
+ *         description: No supplier with that id in the caller's organisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ */
 // Delete a supplier, scoped to the requester's org (admin only)
 router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) => {
   if (isDemoMode()) {
