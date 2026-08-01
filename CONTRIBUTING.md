@@ -276,6 +276,16 @@ Every item from the Phase 1 Audit above has since been implemented, hardened, an
 
 All test data (accounts, orgs, suppliers) created during the smoke test was cleaned from Atlas afterward.
 
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 1 hardening, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Supplier update (`PUT`/`PATCH /suppliers/:id`) is admin-only, matching create/delete.** It originally had no role check at all — any authenticated org member, including `viewer`, could edit a supplier. Gated it with `requireRole('admin')` since there was no evidence anywhere (schema, docs, frontend) that "viewer can edit" was intentional, and the role name itself implies read-only. The frontend's Edit button is now hidden for non-admins the same way Delete already was. (`server/routes/suppliers.js`, `client/src/pages/SupplierDetail.jsx`)
+
+- **`contractExpiry` validation deliberately allows past dates.** It had no validator at all; when adding one, past dates were kept valid rather than rejected. An already-lapsed contract is real, important data for a supplier-risk app to hold — it's a risk signal ("needs renewal"), not bad input. The validator only checks that the value is a well-formed ISO 8601 date, not where it falls relative to today. (`server/routes/suppliers.js`)
+
+- **`riskScore` was validated but silently dropped on create.** `POST /suppliers` ran `riskScore` through `express-validator`, but the handler's destructure of `req.body` never actually included it, so every created supplier silently fell back to the schema default (`0`) no matter what was sent. Fixed in both the real-DB and demo-mode create paths. Worth remembering as a bug *category*, not just a one-off: a field can be fully validated and still never reach persistence — the same audit (checking every validated field against what's actually saved) is worth re-running whenever a create/update handler changes. (`server/routes/suppliers.js`, `server/services/demoStore.js`)
+
 ## Backlog — carried into Phase 2
 
 Known, deferred issues. None block Phase 1 completion; all are pre-existing gaps in the Phase 2 (Intelligent Data Layer) surface area:
