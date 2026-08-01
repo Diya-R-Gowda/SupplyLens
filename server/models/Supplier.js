@@ -6,7 +6,20 @@ const supplierSchema = new mongoose.Schema({
   riskScore: { type: Number, default: 0, min: 0, max: 100 }, // matches the 0-100 scale used by RiskBadge.jsx
   contractExpiry: Date,
   paymentTerms: { type: String, trim: true, maxlength: 100 },
-  orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organisation', required: true }
+  orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organisation', required: true },
+  // AI-generated company enrichment (Phase 3) - explicitly separate from the
+  // manually-entered fields above so the UI can label it "verify
+  // independently" rather than presenting it as a verified data source.
+  // Re-runnable: enrichedAt lets the UI show staleness and offer a refresh,
+  // rather than treating a single enrichment as permanent.
+  enrichment: {
+    industry: String,
+    companySize: String,
+    foundedYear: Number,
+    summary: String,
+    source: { type: String, enum: ['gemini'] },
+    enrichedAt: Date,
+  },
 }, { timestamps: true });
 
 // Every existing query filters by orgId (routes/suppliers.js); this compound index
