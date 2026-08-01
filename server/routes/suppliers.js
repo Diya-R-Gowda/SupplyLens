@@ -135,15 +135,15 @@ router.get('/', auth, asyncHandler(async (req, res) => {
 
 // Create a supplier (admin only)
 router.post('/', auth, requireRole('admin'), validate(createSupplierValidation), asyncHandler(async (req, res) => {
-  const { name, category, country, contractExpiry, paymentTerms } = req.body;
+  const { name, category, country, contractExpiry, paymentTerms, riskScore } = req.body;
 
   if (isDemoMode()) {
-    const supplier = upsertDemoSupplier(req.user.orgId, { name, category, country, contractExpiry, paymentTerms });
+    const supplier = upsertDemoSupplier(req.user.orgId, { name, category, country, contractExpiry, paymentTerms, riskScore });
     return sendSuccess(res, supplier, { status: 201 });
   }
 
   const newSupplier = new Supplier({
-    name, category, country, contractExpiry, paymentTerms,
+    name, category, country, contractExpiry, paymentTerms, riskScore,
     orgId: req.user.orgId,
   });
   const supplier = await newSupplier.save();

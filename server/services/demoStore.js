@@ -83,7 +83,7 @@ const upsertDemoSupplier = (orgId, supplier) => {
     name: supplier.name,
     category: supplier.category || 'other',
     country: supplier.country,
-    riskScore: 0,
+    riskScore: supplier.riskScore ?? 0,
     contractExpiry: supplier.contractExpiry || null,
     paymentTerms: supplier.paymentTerms || '',
     orgId: orgKey,
