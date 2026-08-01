@@ -32,6 +32,10 @@ const createSupplierValidation = [
   body('category').optional().isIn(CATEGORY_VALUES).withMessage(`Category must be one of: ${CATEGORY_VALUES.join(', ')}`),
   body('riskScore').optional().isFloat({ min: 0, max: 100 }).withMessage('Risk score must be between 0 and 100').toFloat(),
   body('paymentTerms').optional().trim().isLength({ max: 100 }).withMessage('Payment terms must be at most 100 characters'),
+  // Past dates are deliberately allowed: an already-lapsed contract is a
+  // real, important state to record (that's a risk signal, not bad input) -
+  // only the shape of the value is being checked here, not how it compares to today.
+  body('contractExpiry').optional({ nullable: true }).isISO8601().withMessage('Contract expiry must be a valid date (e.g. 2026-12-31)').toDate(),
 ];
 
 const updateSupplierValidation = [
@@ -40,6 +44,7 @@ const updateSupplierValidation = [
   body('category').optional().isIn(CATEGORY_VALUES).withMessage(`Category must be one of: ${CATEGORY_VALUES.join(', ')}`),
   body('riskScore').optional().isFloat({ min: 0, max: 100 }).withMessage('Risk score must be between 0 and 100').toFloat(),
   body('paymentTerms').optional().trim().isLength({ max: 100 }).withMessage('Payment terms must be at most 100 characters'),
+  body('contractExpiry').optional({ nullable: true }).isISO8601().withMessage('Contract expiry must be a valid date (e.g. 2026-12-31)').toDate(),
 ];
 
 const SUPPLIER_NOT_FOUND = () => new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
