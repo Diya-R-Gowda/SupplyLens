@@ -10,6 +10,8 @@ const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { enrichSupplierData } = require('../services/enrichmentService');
 const { computeRiskScore } = require('../services/riskScoreService');
+const NewsCache = require('../models/NewsCache');
+const RiskHistory = require('../models/RiskHistory');
 const mongoose = require('mongoose');
 const {
   listDemoSuppliers,
@@ -826,6 +828,99 @@ router.post('/:id/enrich', auth, asyncHandler(async (req, res) => {
   await computeRiskScore(supplier, 'enrichment_update');
 
   return sendSuccess(res, enrichment);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/timeline:
+ *   get:
+ *     summary: Chronological feed of events for a supplier
+ *     description: >
+ *       Aggregated on read from existing collections (Supplier, Document, NewsCache, RiskHistory)
+ *       rather than a dedicated event-log model - avoids duplicating data that already exists
+ *       elsewhere and needing to keep it in sync. Merges supplier_created / supplier_updated (only
+ *       if the supplier has actually been edited since creation) / document_uploaded /
+ *       news_mentioned / risk_changed events, sorted most recent first. Not available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Merged, chronologically-sorted event feed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 - type: risk_changed
+ *                   timestamp: '2026-08-02T12:05:00.000Z'
+ *                   previousScore: 30
+ *                   newScore: 45
+ *                   delta: 15
+ *                   reason: scheduled_news_update
+ *                 - type: news_mentioned
+ *                   timestamp: '2026-08-02T11:00:00.000Z'
+ *                   headline: Example headline
+ *                   sentiment: negative
+ *                 - type: document_uploaded
+ *                   timestamp: '2026-08-01T19:10:00.000Z'
+ *                   fileName: msa-2026.pdf
+ *                 - type: supplier_created
+ *                   timestamp: '2026-07-31T09:00:00.000Z'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
+ */
+router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, []);
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const [documents, news, riskChanges] = await Promise.all([
+    Document.find({ supplierId: supplier._id }).lean(),
+    NewsCache.find({ supplierId: supplier._id, orgId: req.user.orgId }).lean(),
+    RiskHistory.find({ supplierId: supplier._id, orgId: req.user.orgId }).lean(),
+  ]);
+
+  const events = [
+    { type: 'supplier_created', timestamp: supplier.createdAt },
+    // Only a real signal if the supplier has actually changed since creation -
+    // otherwise every supplier would show a redundant "updated" event for
+    // its own creation (createdAt and updatedAt start out equal).
+    ...(supplier.updatedAt > supplier.createdAt
+      ? [{ type: 'supplier_updated', timestamp: supplier.updatedAt }]
+      : []),
+    ...documents.map((doc) => ({
+      type: 'document_uploaded', timestamp: doc.uploadedAt, fileName: doc.fileName,
+    })),
+    ...news.map((item) => ({
+      type: 'news_mentioned', timestamp: item.publishedAt, headline: item.headline, sentiment: item.sentiment,
+    })),
+    ...riskChanges.map((change) => ({
+      type: 'risk_changed',
+      timestamp: change.createdAt,
+      previousScore: change.previousScore,
+      newScore: change.newScore,
+      delta: change.delta,
+      reason: change.reason,
+    })),
+  ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  return sendSuccess(res, events);
 }));
 
 module.exports = router;
