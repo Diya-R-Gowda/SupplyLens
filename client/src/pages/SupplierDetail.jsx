@@ -6,6 +6,8 @@ import RagChatDrawer from '../components/RagChatDrawer';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Modal from '../components/Modal';
+import Card from '../components/Card';
+import Badge from '../components/Badge';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -50,6 +52,9 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState('');
 
   const isAdmin = user?.role === 'admin';
 
@@ -100,6 +105,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setSaveError(firstDetail || requestError?.response?.data?.error?.message || 'Unable to save changes.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    setEnrichError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/enrich`);
+      setSupplier((prev) => ({ ...prev, enrichment: response.data.data }));
+    } catch (requestError) {
+      setEnrichError(requestError?.response?.data?.error?.message || 'Unable to enrich supplier data.');
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -256,6 +274,36 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             </div>
           ) : (
             <p className="mt-2.5 mb-0 text-slate-600">No documents uploaded yet.</p>
+          )}
+        </section>
+
+        <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
+          <div className="flex justify-between items-center gap-3 mb-3">
+            <h2 className="m-0 text-[1.1rem] text-slate-900">Company Enrichment</h2>
+            <Button className={pillButtonClass} onClick={handleEnrich} loading={enriching} loadingText="Enriching...">
+              {supplier.enrichment?.enrichedAt ? 'Refresh' : 'Enrich with AI'}
+            </Button>
+          </div>
+          {enrichError ? <p className="m-0 mb-2.5 text-red-700">{enrichError}</p> : null}
+          {supplier.enrichment?.enrichedAt ? (
+            <Card className="grid gap-2 p-4 rounded-2xl bg-white/72">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[0.78rem] uppercase tracking-[0.08em]">
+                  AI-generated - verify independently
+                </Badge>
+                <span className="text-slate-500 text-[0.85rem]">
+                  Last enriched {new Date(supplier.enrichment.enrichedAt).toLocaleString()}
+                </span>
+              </div>
+              <p className="m-0 text-slate-900">{supplier.enrichment.summary || 'No summary available.'}</p>
+              <div className="flex flex-wrap gap-2.5 mt-1">
+                {supplier.enrichment.industry ? <Badge className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[0.85rem]">{supplier.enrichment.industry}</Badge> : null}
+                {supplier.enrichment.companySize ? <Badge className="px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]">{supplier.enrichment.companySize}</Badge> : null}
+                {supplier.enrichment.foundedYear ? <Badge className="px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]">Founded {supplier.enrichment.foundedYear}</Badge> : null}
+              </div>
+            </Card>
+          ) : (
+            <p className="m-0 text-slate-600">No enrichment data yet - click "Enrich with AI" to populate industry, size, and a summary using Gemini.</p>
           )}
         </section>
 
