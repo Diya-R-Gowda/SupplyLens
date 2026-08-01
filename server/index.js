@@ -2,13 +2,17 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
 const connectDB = require('./config/db'); // Your Mongoose connection logic
+const swaggerSpec = require('./config/swagger');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
