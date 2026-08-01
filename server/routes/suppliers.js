@@ -628,14 +628,28 @@ router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) 
  *               success: false
  *               error: { message: Original file retrieval is not available in demo mode, code: DEMO_MODE_UNSUPPORTED }
  *       404:
- *         description: No such supplier in the caller's org, no such document for that supplier, or the underlying GridFS file is missing
+ *         description: >
+ *           Two distinct cases share this status: the supplier isn't in the caller's org (or
+ *           doesn't exist), or the document doesn't belong to that supplier - both return
+ *           DOCUMENT_NOT_FOUND; separately, the Document record exists but its GridFS binary is
+ *           gone (data corruption, or the file was deleted outside the normal delete endpoint) -
+ *           that returns DOCUMENT_FILE_NOT_FOUND instead, verified live against a real orphaned
+ *           reference.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorEnvelope'
- *             example:
- *               success: false
- *               error: { message: Document not found, code: DOCUMENT_NOT_FOUND }
+ *             examples:
+ *               documentOrSupplierNotFound:
+ *                 summary: No such supplier in this org, or no such document for that supplier
+ *                 value:
+ *                   success: false
+ *                   error: { message: Document not found, code: DOCUMENT_NOT_FOUND }
+ *               gridFsFileMissing:
+ *                 summary: Document record exists but its GridFS binary is gone
+ *                 value:
+ *                   success: false
+ *                   error: { message: Document file not found, code: DOCUMENT_FILE_NOT_FOUND }
  */
 router.get('/:id/documents/:docId/file', auth, asyncHandler(async (req, res, next) => {
   if (isDemoMode()) {
