@@ -59,6 +59,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [enrichError, setEnrichError] = useState('');
 
   const isAdmin = user?.role === 'admin';
+  const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
 
   const loadTimeline = () => {
     api.get(`/suppliers/${supplierId}/timeline`).then((res) => setTimeline(res.data.data || [])).catch(() => setTimeline([]));
@@ -151,7 +152,15 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       <div className="flex-1 grid gap-5 overflow-y-auto">
         <div className="flex justify-between items-center gap-3">
           <Button onClick={onBack} className={pillButtonClass}>Back</Button>
-          <RiskBadge score={supplier.riskScore} />
+          <div className="grid gap-1 justify-items-end">
+            <RiskBadge score={supplier.riskScore} />
+            {lastRiskChange ? (
+              <span className="text-[0.78rem] text-slate-500 text-right max-w-[280px]">
+                {lastRiskChange.delta > 0 ? '+' : ''}{lastRiskChange.delta} from {lastRiskChange.previousScore} on{' '}
+                {new Date(lastRiskChange.timestamp).toLocaleDateString()} ({lastRiskChange.reason?.replace(/_/g, ' ')})
+              </span>
+            ) : null}
+          </div>
         </div>
 
         {isEditing ? (

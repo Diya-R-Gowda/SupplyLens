@@ -49,6 +49,11 @@ export default function Timeline({ events }) {
               {event.type === 'news_mentioned' && event.sentiment ? (
                 <span className="text-[0.78rem] text-slate-500 capitalize">{event.sentiment} sentiment</span>
               ) : null}
+              {event.type === 'risk_changed' && event.factors ? (
+                <span className="text-[0.78rem] text-slate-500">
+                  Factors - news: {event.factors.newsScore}, contract expiry: {event.factors.expiryScore}, documents: {event.factors.docScore}, country: {event.factors.countryScore}
+                </span>
+              ) : null}
             </div>
           </Card>
         );

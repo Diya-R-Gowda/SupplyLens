@@ -917,6 +917,7 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
       newScore: change.newScore,
       delta: change.delta,
       reason: change.reason,
+      factors: change.factors,
     })),
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
