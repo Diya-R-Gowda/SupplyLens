@@ -75,18 +75,20 @@ and combines these signals into a continuously evolving Digital Twin capable of:
 
 
 
-# Remaining Work — Phase 1 (Foundation)
+# Remaining Work — Phase 1 (Foundation) — ✅ COMPLETE (2026-08-01)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Authentication | Implement JWT authentication, bcrypt password hashing, refresh tokens, protected routes, and role-based access control. |
-| 🔴 | Supplier CRUD | Complete supplier creation, editing, deletion, searching, filtering, pagination, and validation. |
-| 🔴 | Dashboard | Build responsive dashboard with KPIs, supplier statistics, charts, and recent activity. |
-| 🔴 | Database Design | Finalize MongoDB schemas, indexes, validation, and relationships between collections. |
-| 🔴 | REST API | Implement RESTful endpoints for authentication and supplier management. |
-| 🔴 | Error Handling | Add centralized error middleware and standardized API responses. |
-| 🔴 | UI Components | Build reusable React components and responsive layouts using Tailwind CSS. |
-| 🔴 | API Documentation | Document all backend endpoints using Swagger/OpenAPI. |
+| 🟢 | Authentication | JWT authentication, bcrypt password hashing, refresh tokens (rotation-on-use), protected routes, and role-based access control (`admin`/`viewer`) implemented and smoke-tested. |
+| 🟢 | Supplier CRUD | Supplier creation, editing, deletion, searching, filtering, pagination, and validation complete. Update/delete are admin-only; viewers are read-only. |
+| 🟢 | Dashboard | Responsive dashboard with KPIs, category/growth charts, and a recent-activity feed, backed by a real MongoDB aggregation endpoint. |
+| 🟢 | Database Design | Schemas finalized with indexes (incl. compound org+name uniqueness), timestamps, and field-level validation. |
+| 🟢 | REST API | RESTful endpoints for auth, suppliers, and dashboard stats, all on a consistent response envelope and status-code convention. |
+| 🟢 | Error Handling | Centralized error middleware, 404 handler, and standardized `{ success, data/error }` responses across every route. |
+| 🟢 | UI Components | Tailwind installed/configured; shared Button/Input/Modal/Card/Badge component library in place; dead files removed. |
+| 🟢 | API Documentation | Full Swagger/OpenAPI docs at `/api-docs`, covering every endpoint across auth, suppliers, dashboard, documents, news, and RAG. |
+
+See [Phase 1 Complete — End-to-End Smoke Test](#-phase-1-complete--end-to-end-smoke-test-2026-08-01) below for the full verification results.
 
 ---
 
@@ -252,6 +254,36 @@ That background command already finished and was folded into the audit above —
 | 🟡 Partial | Core functionality exists but is incomplete |
 | 🟠 Partial / Broken | Exists but has significant implementation or dependency issues |
 | 🔴 Missing | Not implemented |
+---
+
+# ✅ Phase 1 Complete — End-to-End Smoke Test (2026-08-01)
+
+Every item from the Phase 1 Audit above has since been implemented, hardened, and verified. This is the final full end-to-end smoke test run on `main` against **real Atlas data** (not demo mode) before moving on to Phase 2.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Register → login → token pair | 🟢 PASS | Both register and a separate explicit login issued a real `accessToken` + `refreshToken` pair |
+| 2 | Create 3 suppliers (varied category/risk/country) | 🟢 PASS | Berlin Components GmbH (raw_material, DE, risk 15), Shibuya Cloud KK (saas, JP, risk 72), Thames Freight Ltd (other, GB, risk 45) — all `201` |
+| 3 | Search / filter / paginate | 🟢 PASS | Name search, category filter, and country filter each returned the correct single match; pagination meta verified correct, including a forced 2-page split via `?limit=2` |
+| 4 | Edit one supplier, confirm persistence | 🟢 PASS | Edited risk score, confirmed via a **hard refetch** (page reload + re-navigate), not just optimistic client state |
+| 5 | Delete one as admin, confirm 404 on refetch | 🟢 PASS | Deleted supplier via UI; follow-up `GET` on that id returned `404 SUPPLIER_NOT_FOUND` |
+| 6 | Viewer-role restrictions (create/update/delete) | 🟢 PASS | `POST`/`PUT`/`DELETE` all `403 FORBIDDEN` for `viewer`; `GET`/list still `200`; UI shows no Edit/Delete controls for non-admins |
+| 7 | Dashboard matches real data | 🟢 PASS | KPIs, category breakdown, growth series, and recent activity all cross-checked against the actual dataset created during the test |
+| 8 | `/api-docs` fully functional | 🟢 PASS | All 15 operations across 11 paths render correctly, zero console errors |
+| 9 | Zero console errors throughout (Playwright) | 🟢 PASS | Every normal user-facing flow produced zero errors; the only console lines logged were the browser's default logging of intentionally-triggered 403/404 responses from the test's own negative-path assertions (viewer-restriction and post-delete checks), not application bugs |
+
+All test data (accounts, orgs, suppliers) created during the smoke test was cleaned from Atlas afterward.
+
+## Backlog — carried into Phase 2
+
+Known, deferred issues. None block Phase 1 completion; all are pre-existing gaps in the Phase 2 (Intelligent Data Layer) surface area:
+
+- **`pdf-parse` v2 API mismatch** (`server/services/ingestService.js`) — still calls `pdf(buffer)` the v1 way; the installed v2 exports a `PDFParse` class instead of a callable function. Real (non-demo) document upload/ingestion 500s until fixed.
+- **Gemini `text-embedding-004`** (`server/services/embedService.js`) — used for both ingestion and RAG query embedding; last known to be failing. Blocks real RAG independently of the pdf-parse fix.
+- **`jobs/newsCron.js` never wired up** — not required anywhere in the app or any npm script, so `NewsCache` is never populated in real DB mode; `GET /news/:supplierId` returns an empty array for every real supplier until this job is actually started somewhere.
+
 ---
 
 # 🎯 Target Release
