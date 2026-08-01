@@ -27,7 +27,8 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *       (bad PDF, embedding API failure), the just-uploaded GridFS file is deleted too, so a
  *       failed upload never leaves an orphaned binary with no Document pointing at it. In demo
  *       mode (no MongoDB connection) this always succeeds and returns a canned response, since no
- *       real parsing/storage happens there.
+ *       real parsing/storage happens there. Org-scoped like every other supplier-facing route - a
+ *       supplier belonging to a different org 404s rather than accepting the upload.
  *     tags: [Documents]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -63,6 +64,15 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *             example:
  *               success: false
  *               error: { message: No file uploaded, code: FILE_REQUIRED }
+ *       404:
+ *         description: No such supplier in the caller's org (real mode only)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  *       500:
  *         description: Ingestion failed - never silently reported as success; the GridFS upload is cleaned up too
  *         content:
@@ -82,6 +92,14 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
   if (isDemoMode()) {
     recordDemoUploadedDocument(supplierId, req.file.originalname);
     return sendSuccess(res, recordDemoDocument(supplierId, req.file.originalname), { status: 201 });
+  }
+
+  // Same org-scoped, 404-not-403 pattern as everywhere else - without this, any
+  // authenticated user could upload (and trigger real embedding calls against)
+  // a document into another org's supplier.
+  const supplier = await Supplier.findOne({ _id: supplierId, orgId: req.user.orgId });
+  if (!supplier) {
+    throw new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
   }
 
   const gridFsFileId = await uploadBuffer(req.file.buffer, req.file.originalname, { supplierId });
@@ -106,10 +124,8 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
  *   get:
  *     summary: List documents uploaded for a supplier
  *     description: >
- *       Not scoped to the caller's organisation by orgId - only by supplierId. Since supplierId
- *       itself is always org-scoped elsewhere, this is only reachable for suppliers the caller
- *       already knows about, but note it does not independently verify org ownership the way
- *       the suppliers routes do.
+ *       Org-scoped like every other supplier-facing route - a supplier belonging to a different
+ *       org 404s rather than leaking whether it exists or listing its documents.
  *     tags: [Documents]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -142,10 +158,27 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
  *             example:
  *               success: false
  *               error: { message: Token has expired, code: TOKEN_EXPIRED }
+ *       404:
+ *         description: No such supplier in the caller's org (real mode only)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  */
 router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     return sendSuccess(res, listDemoDocuments(req.params.supplierId));
+  }
+
+  // Same org-scoped, 404-not-403 pattern as everywhere else - without this,
+  // any authenticated user could list another org's document filenames and
+  // metadata just by guessing/knowing a supplierId.
+  const supplier = await Supplier.findOne({ _id: req.params.supplierId, orgId: req.user.orgId });
+  if (!supplier) {
+    throw new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
   }
 
   const documents = await Document.find({ supplierId: req.params.supplierId })

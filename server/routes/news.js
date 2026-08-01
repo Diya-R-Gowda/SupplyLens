@@ -3,8 +3,10 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
 const NewsCache = require('../models/NewsCache');
+const Supplier = require('../models/Supplier');
 const { listDemoNews } = require('../services/demoStore');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
@@ -52,10 +54,27 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *             example:
  *               success: false
  *               error: { message: Token has expired, code: TOKEN_EXPIRED }
+ *       404:
+ *         description: No such supplier in the caller's org (real mode only)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  */
 router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
 	if (isDemoMode()) {
 		return sendSuccess(res, listDemoNews(req.params.supplierId));
+	}
+
+	// Same org-scoped, 404-not-403 pattern as suppliers.js/documents.js/rag.js -
+	// without this, any authenticated user could read another org's cached
+	// news/sentiment items just by guessing/knowing a supplierId.
+	const supplier = await Supplier.findOne({ _id: req.params.supplierId, orgId: req.user.orgId });
+	if (!supplier) {
+		throw new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
 	}
 
 	const news = await NewsCache.find({ supplierId: req.params.supplierId })
