@@ -9,6 +9,7 @@ const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { enrichSupplierData } = require('../services/enrichmentService');
+const { computeRiskScore } = require('../services/riskScoreService');
 const mongoose = require('mongoose');
 const {
   listDemoSuppliers,
@@ -815,6 +816,14 @@ router.post('/:id/enrich', auth, asyncHandler(async (req, res) => {
   const enrichment = await enrichSupplierData(supplier.name);
   supplier.enrichment = enrichment;
   await supplier.save();
+
+  // Enrichment doesn't feed the risk formula itself yet - there's no clear,
+  // non-speculative signal for how industry/company-size/founding-year
+  // should move a risk score without more product input (see TODO.md). This
+  // recompute is just for freshness (e.g. picking up news/document changes
+  // that happened since the last risk update), same reason bucket as any
+  // other trigger so it's independently rate-limited from news-driven ones.
+  await computeRiskScore(supplier, 'enrichment_update');
 
   return sendSuccess(res, enrichment);
 }));
