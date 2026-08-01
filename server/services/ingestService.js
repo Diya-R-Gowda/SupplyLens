@@ -1,12 +1,23 @@
-const pdf = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 const DocChunk = require('../models/DocChunk');
 const Document = require('../models/Document');
 const { getEmbeddings } = require('./embedService');
 
 exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-document.pdf') => {
   // 1. Extract Text
-  const data = await pdf(fileBuffer);
-  const fullText = data.text;
+  // pdf-parse v2 exports a class, not a callable function (v1's `pdf(buffer)`
+  // shape) - it must be instantiated and its buffer released via destroy()
+  // once done, or the underlying PDF.js document stays resident in memory.
+  const parser = new PDFParse({ data: fileBuffer });
+  let fullText;
+  let pageCount;
+  try {
+    const result = await parser.getText();
+    fullText = result.text;
+    pageCount = result.total;
+  } finally {
+    await parser.destroy();
+  }
 
   // 2. Simple Chunking (~500 tokens / approx 2000 characters)
   const chunks = [];
@@ -36,5 +47,5 @@ exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-documen
     uploadedAt: new Date(),
   });
   
-  return { success: true, totalChunks: chunks.length };
+  return { success: true, totalChunks: chunks.length, pageCount };
 };
