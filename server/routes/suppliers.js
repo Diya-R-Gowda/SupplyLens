@@ -5,6 +5,8 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const Supplier = require('../models/Supplier');
+const Document = require('../models/Document');
+const { openDownloadStream } = require('../services/gridfsService');
 const mongoose = require('mongoose');
 const {
   listDemoSuppliers,
@@ -585,6 +587,81 @@ router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId);
   await supplier.deleteOne();
   return sendSuccess(res, null, { message: 'Supplier deleted' });
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/documents/{docId}/file:
+ *   get:
+ *     summary: Download the original PDF binary for a document
+ *     description: >
+ *       Streams the original uploaded file straight from GridFS (never buffered fully in
+ *       memory). Org-scoped like every other supplier route - the supplier must belong to the
+ *       caller's organisation, and the document must belong to that supplier, or this 404s.
+ *       Not available in demo mode, since no real file storage happens there.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Supplier id
+ *       - in: path
+ *         name: docId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Document id (from GET /documents/{supplierId})
+ *     responses:
+ *       200:
+ *         description: The original PDF binary
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Original file retrieval is not available in demo mode, code: DEMO_MODE_UNSUPPORTED }
+ *       404:
+ *         description: No such supplier in the caller's org, no such document for that supplier, or the underlying GridFS file is missing
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Document not found, code: DOCUMENT_NOT_FOUND }
+ */
+router.get('/:id/documents/:docId/file', auth, asyncHandler(async (req, res, next) => {
+  if (isDemoMode()) {
+    throw new ApiError('Original file retrieval is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const document = await Document.findOne({ _id: req.params.docId, supplierId: req.params.id });
+  if (!document || !document.gridFsFileId) {
+    throw new ApiError('Document not found', 404, 'DOCUMENT_NOT_FOUND');
+  }
+
+  const downloadStream = openDownloadStream(document.gridFsFileId);
+
+  // GridFSBucketReadStream emits its "not found" error asynchronously, after
+  // this handler has already returned - asyncHandler's catch can't see it, so
+  // it's translated to a clean 404 here instead of falling through as a 500.
+  downloadStream.on('error', (err) => {
+    if (res.headersSent) return next(err);
+    next(new ApiError('Document file not found', 404, 'DOCUMENT_FILE_NOT_FOUND'));
+  });
+
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `inline; filename="${document.fileName}"`);
+  downloadStream.pipe(res);
 }));
 
 module.exports = router;
