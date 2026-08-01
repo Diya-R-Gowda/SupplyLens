@@ -6,6 +6,46 @@ const mongoose = require('mongoose');
 const formatHistory = (history) =>
   history.map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Atlas Search indexes newly-inserted chunks asynchronously - live-measured
+// during the Phase 2 smoke test, a chunk from a just-completed upload took
+// ~6-7s to become queryable via $vectorSearch. Immediately after ingestion,
+// a real question can otherwise get zero results not because there's nothing
+// relevant, but because the newest chunk hasn't been indexed yet. These
+// delays (cumulative ~6s across 3 retries) are sized to cover that window.
+// Only a true zero-result response is retried - if $vectorSearch returns any
+// chunks at all (even low-relevance ones, since it returns the filter's top-k
+// regardless of score), that's a real answer and returns immediately with no
+// added latency.
+const ZERO_RESULT_RETRY_DELAYS_MS = [1000, 2000, 3000];
+
+const runVectorSearch = (supplierId, queryVector) => DocChunk.aggregate([
+  {
+    $vectorSearch: {
+      index: "default", // The name you gave the index in Atlas
+      path: "embedding",
+      queryVector,
+      numCandidates: 100,
+      limit: 5,
+      filter: { supplierId: new mongoose.Types.ObjectId(supplierId) }
+    }
+  },
+  {
+    $project: { text: 1, docId: 1, _id: 0 }
+  }
+]);
+
+const runVectorSearchWithRetry = async (supplierId, queryVector) => {
+  let contextChunks = await runVectorSearch(supplierId, queryVector);
+  for (const delay of ZERO_RESULT_RETRY_DELAYS_MS) {
+    if (contextChunks.length > 0) break;
+    await sleep(delay);
+    contextChunks = await runVectorSearch(supplierId, queryVector);
+  }
+  return contextChunks;
+};
+
 // 8 messages = last 4 user/assistant exchanges. A follow-up like "why is it
 // that high?" almost always refers to the immediately preceding answer, not
 // something from ten turns ago - capping keeps prompt size (and Gemini token
@@ -21,23 +61,9 @@ exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
   // 1. Convert user question to an embedding
   const questionEmbedding = await getEmbeddings(question);
 
-  // 2. Perform Vector Search in MongoDB (Filtered by supplierId)
-  // This matches the aggregation code on Page 7 of your PDF
-  const contextChunks = await DocChunk.aggregate([
-    {
-      $vectorSearch: {
-        index: "default", // The name you gave the index in Atlas
-        path: "embedding",
-        queryVector: questionEmbedding,
-        numCandidates: 100,
-        limit: 5,
-        filter: { supplierId: new mongoose.Types.ObjectId(supplierId) }
-      }
-    },
-    {
-      $project: { text: 1, docId: 1, _id: 0 }
-    }
-  ]);
+  // 2. Perform Vector Search in MongoDB (Filtered by supplierId), retrying on
+  // a true zero-result response to ride out Atlas Search's indexing lag
+  const contextChunks = await runVectorSearchWithRetry(supplierId, questionEmbedding);
 
   if (contextChunks.length === 0) {
     return { answer: "I couldn't find any information in the uploaded documents to answer that.", sources: [] };
