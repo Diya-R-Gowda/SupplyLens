@@ -1,33 +1,90 @@
 const NewsCache = require('../models/NewsCache');
 const Document = require('../models/Document');
+const RiskHistory = require('../models/RiskHistory');
 const countryRiskMap = require('../data/countryRisk.json');
 
-exports.computeRiskScore = async (supplier) => {
-  // 1. News Sentiment (40%)
-  const news = await NewsCache.find({ supplierId: supplier._id });
-  const negativeArticles = news.filter(n => n.sentiment === 'negative').length;
-  let newsScore = negativeArticles >= 2 ? 100 : (negativeArticles === 1 ? 50 : 0);
+// Caps how much a single call can move the score, so a burst of negative
+// news (or a batch cron run touching many articles at once) can't produce a
+// nonsensical single-step jump - the score still moves toward the "correct"
+// weighted value, just gradually across multiple triggered updates.
+const MAX_SCORE_DELTA = 15;
 
-  // 2. Contract Expiry (30%)
+// Guards against the same trigger type re-scoring a supplier repeatedly in a
+// short window (e.g. several manual refreshes in a row) - at most one actual
+// score change per reason per supplier per day. Different reasons (news vs.
+// enrichment) are tracked independently, so one doesn't block the other.
+const RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
+
+// Weighted, explainable v1 formula - deliberately not a black-box model, so
+// "why did this score change" is always answerable from `factors` alone:
+//   - 40% news sentiment: 2+ negative articles in the cache -> 100, 1 -> 50, 0 -> 0
+//   - 30% contract expiry: <=30 days -> 100, <=90 days -> 50, unknown -> 75 (treated as risky), else 0
+//   - 20% missing documents: 0 docs -> 100, 1-2 -> 50, 3+ -> 0
+//   - 10% country risk: static lookup table (server/data/countryRisk.json), default 50 if not listed
+const computeFactors = async (supplier) => {
+  const news = await NewsCache.find({ supplierId: supplier._id });
+  const negativeArticles = news.filter((n) => n.sentiment === 'negative').length;
+  const newsScore = negativeArticles >= 2 ? 100 : (negativeArticles === 1 ? 50 : 0);
+
   let expiryScore = 0;
   if (supplier.contractExpiry) {
     const daysToExpiry = (new Date(supplier.contractExpiry) - new Date()) / (1000 * 60 * 60 * 24);
     if (daysToExpiry <= 30) expiryScore = 100;
     else if (daysToExpiry <= 90) expiryScore = 50;
   } else {
-    expiryScore = 75; // Unknown is risky
+    expiryScore = 75;
   }
 
-  // 3. Missing Documents (20%)
   const docCount = await Document.countDocuments({ supplierId: supplier._id });
-  let docScore = docCount >= 3 ? 0 : (docCount >= 1 ? 50 : 100);
+  const docScore = docCount >= 3 ? 0 : (docCount >= 1 ? 50 : 100);
 
-  // 4. Country Risk (10%)
-  let countryScore = countryRiskMap[supplier.country] || 50;
+  const countryScore = countryRiskMap[supplier.country] || 50;
 
-  // Final Weighted Calculation
-  const totalScore = (newsScore * 0.4) + (expiryScore * 0.3) + (docScore * 0.2) + (countryScore * 0.1);
-  
-  supplier.riskScore = Math.round(totalScore);
+  return { newsScore, expiryScore, docScore, countryScore };
+};
+
+// Recomputes a supplier's risk score and, if it actually changes, persists
+// both the new score and a RiskHistory record explaining why. `reason` is
+// the trigger type (e.g. 'scheduled_news_update', 'manual_news_refresh',
+// 'enrichment_update') and doubles as the rate-limit bucket.
+exports.computeRiskScore = async (supplier, reason = 'unspecified') => {
+  const recentSameReasonUpdate = await RiskHistory.findOne({
+    supplierId: supplier._id,
+    reason,
+    createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_MS) },
+  });
+  if (recentSameReasonUpdate) {
+    return { updated: false, skippedReason: 'rate_limited' };
+  }
+
+  const factors = await computeFactors(supplier);
+  const rawScore = Math.round(
+    (factors.newsScore * 0.4) + (factors.expiryScore * 0.3) + (factors.docScore * 0.2) + (factors.countryScore * 0.1)
+  );
+
+  const previousScore = supplier.riskScore;
+  let delta = rawScore - previousScore;
+  if (Math.abs(delta) > MAX_SCORE_DELTA) {
+    delta = Math.sign(delta) * MAX_SCORE_DELTA;
+  }
+  const newScore = Math.max(0, Math.min(100, previousScore + delta));
+
+  if (newScore === previousScore) {
+    return { updated: false, skippedReason: 'no_change' };
+  }
+
+  supplier.riskScore = newScore;
   await supplier.save();
+
+  await RiskHistory.create({
+    supplierId: supplier._id,
+    orgId: supplier.orgId,
+    previousScore,
+    newScore,
+    delta: newScore - previousScore,
+    reason,
+    factors,
+  });
+
+  return { updated: true, previousScore, newScore, delta: newScore - previousScore, reason };
 };
