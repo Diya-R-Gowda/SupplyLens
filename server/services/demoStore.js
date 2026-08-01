@@ -154,6 +154,15 @@ const recordDemoUploadedDocument = (supplierId, fileName) => {
   return nextDocument;
 };
 
+const removeDemoDocument = (supplierId, docId) => {
+  const supplierKey = String(supplierId);
+  const currentDocuments = demoDocumentsBySupplierId.get(supplierKey) || [];
+  const nextDocuments = currentDocuments.filter((doc) => String(doc._id) !== String(docId));
+  const removed = nextDocuments.length !== currentDocuments.length;
+  demoDocumentsBySupplierId.set(supplierKey, nextDocuments);
+  return removed;
+};
+
 const listDemoNews = (supplierId) => demoNewsBySupplierId.get(String(supplierId)) || [];
 
 const answerDemoQuestion = (supplierId, question) => {
@@ -183,6 +192,7 @@ module.exports = {
   recordDemoDocument,
   recordDemoUploadedDocument,
   listDemoDocuments,
+  removeDemoDocument,
   listDemoNews,
   answerDemoQuestion,
 };

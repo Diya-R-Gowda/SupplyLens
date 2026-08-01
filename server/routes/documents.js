@@ -155,4 +155,84 @@ router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
   return sendSuccess(res, documents);
 }));
 
+/**
+ * @swagger
+ * /documents/{supplierId}/{docId}:
+ *   delete:
+ *     summary: Delete a document (admin only)
+ *     description: >
+ *       No delete existed for documents before this - added specifically so uploaded PDFs can
+ *       be removed without leaving orphaned data behind: removes the Document record, every
+ *       DocChunk that belongs to it, and its GridFS binary, in that order. Scoped to the
+ *       supplier's organisation, same as supplier delete - a document belonging to a supplier in
+ *       a different org 404s rather than leaking whether it exists.
+ *     tags: [Documents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: supplierId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: docId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Document (and its chunks and GridFS file) deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data: null
+ *               message: Document deleted
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: 'Forbidden: insufficient permissions', code: FORBIDDEN }
+ *       404:
+ *         description: No such supplier in the caller's org, or no such document for that supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *             example:
+ *               success: false
+ *               error: { message: Document not found, code: DOCUMENT_NOT_FOUND }
+ */
+router.delete('/:supplierId/:docId', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+  const { supplierId, docId } = req.params;
+
+  if (isDemoMode()) {
+    removeDemoDocument(supplierId, docId);
+    return sendSuccess(res, null, { message: 'Document deleted' });
+  }
+
+  // Same org-scoped, 404-not-403 pattern as suppliers.js: a document under a
+  // supplier that isn't in the caller's org must look identical to one that
+  // doesn't exist at all.
+  const supplier = await Supplier.findOne({ _id: supplierId, orgId: req.user.orgId });
+  if (!supplier) {
+    throw new ApiError('Document not found', 404, 'DOCUMENT_NOT_FOUND');
+  }
+
+  const document = await Document.findOne({ _id: docId, supplierId });
+  if (!document) {
+    throw new ApiError('Document not found', 404, 'DOCUMENT_NOT_FOUND');
+  }
+
+  await DocChunk.deleteMany({ docId: document._id });
+  await deleteFile(document.gridFsFileId);
+  await document.deleteOne();
+
+  return sendSuccess(res, null, { message: 'Document deleted' });
+}));
+
 module.exports = router;
