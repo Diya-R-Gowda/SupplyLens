@@ -16,13 +16,12 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *   post:
  *     summary: Ask a question about a supplier's ingested contract documents
  *     description: >
- *       **Known issue (real DB mode only):** this calls the same Gemini "text-embedding-004"
- *       model as document ingestion to embed the question before the vector search - if that
- *       model call is failing (see the documents/upload caveat), this endpoint fails the same
- *       way. It also depends on documents having been successfully ingested first, which is
- *       currently blocked by the pdf-parse issue - so in real DB mode this endpoint currently
- *       has no working chunks to search against even if the embedding call itself succeeds. In
- *       demo mode it always returns a canned, keyword-matched answer with no real AI call.
+ *       Embeds the question (gemini-embedding-001), runs $vectorSearch against that supplier's
+ *       docchunks (scoped by the supplierId filter, so one supplier's documents never leak into
+ *       another's answer), then asks gemini-flash-latest to answer using only the retrieved
+ *       chunks as context. Returns a fixed "couldn't find any information" message (not an error)
+ *       if no chunks match. In demo mode it always returns a canned, keyword-matched answer with
+ *       no real AI call.
  *     tags: [RAG]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -60,7 +59,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               success: false
  *               error: { message: Question is required, code: QUESTION_REQUIRED }
  *       500:
- *         description: The RAG pipeline failed (see the known-issue note above) - never silently reported as a fake answer
+ *         description: The RAG pipeline failed (embedding call, vector search, or generation) - never silently reported as a fake answer
  *         content:
  *           application/json:
  *             schema:
