@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
 const upload = require('../middleware/upload');
 const { processPDF } = require('../services/ingestService');
+const { uploadBuffer, deleteFile } = require('../services/gridfsService');
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
-const { recordDemoDocument, recordDemoUploadedDocument, listDemoDocuments } = require('../services/demoStore');
+const DocChunk = require('../models/DocChunk');
+const Supplier = require('../models/Supplier');
+const { recordDemoDocument, recordDemoUploadedDocument, listDemoDocuments, removeDemoDocument } = require('../services/demoStore');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
@@ -18,11 +22,12 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *   post:
  *     summary: Upload and ingest a contract PDF for a supplier
  *     description: >
- *       **Known issue (real DB mode only):** ingestService.js still calls pdf-parse the v1 way
- *       (`pdf(buffer)`), but the installed pdf-parse is v2, which exports a `PDFParse` class
- *       instead of a callable function - so a real upload currently throws and this endpoint
- *       500s outside of demo mode. In demo mode (no MongoDB connection) it always succeeds and
- *       returns a canned response, since no real parsing/embedding happens there.
+ *       The original PDF binary is stored in GridFS before the parse/chunk/embed pipeline runs;
+ *       the resulting file id is saved on the Document record. If ingestion fails partway through
+ *       (bad PDF, embedding API failure), the just-uploaded GridFS file is deleted too, so a
+ *       failed upload never leaves an orphaned binary with no Document pointing at it. In demo
+ *       mode (no MongoDB connection) this always succeeds and returns a canned response, since no
+ *       real parsing/storage happens there.
  *     tags: [Documents]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -48,7 +53,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               $ref: '#/components/schemas/SuccessEnvelope'
  *             example:
  *               success: true
- *               data: { success: true, totalChunks: 4 }
+ *               data: { success: true, totalChunks: 4, pageCount: 2, documentId: 6a6cf137f857b1ef1c7002a1 }
  *       400:
  *         description: No file was attached, or it wasn't a PDF
  *         content:
@@ -59,7 +64,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               success: false
  *               error: { message: No file uploaded, code: FILE_REQUIRED }
  *       500:
- *         description: Ingestion failed (see the pdf-parse caveat above) - never silently reported as success
+ *         description: Ingestion failed - never silently reported as success; the GridFS upload is cleaned up too
  *         content:
  *           application/json:
  *             schema:
@@ -79,11 +84,20 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
     return sendSuccess(res, recordDemoDocument(supplierId, req.file.originalname), { status: 201 });
   }
 
+  const gridFsFileId = await uploadBuffer(req.file.buffer, req.file.originalname, { supplierId });
+
   // No catch-and-fall-back-to-demo-success here: if processPDF fails partway
   // through (bad PDF, embedding API failure, a dropped DB connection mid-ingest),
-  // that must surface as a real error, not a fake "success" response.
-  const result = await processPDF(supplierId, req.file.buffer, req.file.originalname);
-  return sendSuccess(res, result, { status: 201 });
+  // that must surface as a real error, not a fake "success" response. The
+  // GridFS file is still cleaned up on failure so it doesn't get orphaned
+  // with no Document record ever pointing at it.
+  try {
+    const result = await processPDF(supplierId, req.file.buffer, req.file.originalname, gridFsFileId);
+    return sendSuccess(res, result, { status: 201 });
+  } catch (err) {
+    await deleteFile(gridFsFileId);
+    throw err;
+  }
 }));
 
 /**
@@ -118,6 +132,7 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
  *                   fileName: msa-2026.pdf
  *                   totalChunks: 4
  *                   uploadedAt: '2026-07-31T19:10:00.000Z'
+ *                   gridFsFileId: 6a6cf137f857b1ef1c7002b5
  *       401:
  *         description: Missing, malformed, or expired access token
  *         content:

@@ -3,7 +3,7 @@ const DocChunk = require('../models/DocChunk');
 const Document = require('../models/Document');
 const { getEmbeddings } = require('./embedService');
 
-exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-document.pdf') => {
+exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-document.pdf', gridFsFileId) => {
   // 1. Extract Text
   // pdf-parse v2 exports a class, not a callable function (v1's `pdf(buffer)`
   // shape) - it must be instantiated and its buffer released via destroy()
@@ -28,24 +28,29 @@ exports.processPDF = async (supplierId, fileBuffer, fileName = 'uploaded-documen
     chunks.push(fullText.substring(i, i + chunkSize));
   }
 
-  // 3. Embed and Store
-  for (let i = 0; i < chunks.length; i++) {
-    const embedding = await getEmbeddings(chunks[i]);
-    
-    await DocChunk.create({
-      text: chunks[i],
-      embedding: embedding,
-      supplierId: supplierId,
-      chunkIndex: i
-    });
-  }
-
-  await Document.create({
+  // 3. Create the Document record first so each chunk can reference its
+  // parent document's id - needed to delete only this document's chunks
+  // later, rather than every chunk belonging to the supplier.
+  const document = await Document.create({
     supplierId,
     fileName,
     totalChunks: chunks.length,
     uploadedAt: new Date(),
+    gridFsFileId,
   });
-  
-  return { success: true, totalChunks: chunks.length, pageCount };
+
+  // 4. Embed and Store
+  for (let i = 0; i < chunks.length; i++) {
+    const embedding = await getEmbeddings(chunks[i]);
+
+    await DocChunk.create({
+      text: chunks[i],
+      embedding: embedding,
+      supplierId: supplierId,
+      docId: document._id,
+      chunkIndex: i
+    });
+  }
+
+  return { success: true, totalChunks: chunks.length, pageCount, documentId: document._id };
 };
