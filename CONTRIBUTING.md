@@ -90,6 +90,21 @@ and combines these signals into a continuously evolving Digital Twin capable of:
 
 See [Phase 1 Complete — End-to-End Smoke Test](#-phase-1-complete--end-to-end-smoke-test-2026-08-01) below for the full verification results.
 
+## Phase 1 — Technical Summary
+
+**Stack additions this phase:** Tailwind CSS v4 (PostCSS + config file, not just the v4 Vite plugin), recharts, swagger-jsdoc + swagger-ui-express, express-validator. A demo-mode fallback (in-memory, activates automatically whenever MongoDB isn't connected) is mirrored alongside every real-DB code path across all routes.
+
+- **Auth** — JWT access tokens (15min) + opaque refresh tokens (7d, rotation-on-use, sha256-hashed at rest), bcrypt password hashing, `Authorization: Bearer` header standard, distinct error codes for missing/expired/invalid tokens (`TOKEN_MISSING`/`TOKEN_EXPIRED`/`TOKEN_INVALID`). Split `register`/`login`/`refresh`/`logout` endpoints.
+- **RBAC** — two roles, `admin` and `viewer`. `admin` can create/update/delete suppliers; `viewer` is read-only everywhere (list/get/dashboard). Enforced via a shared `requireRole('admin')` middleware on create, update, and delete alike.
+- **Multi-tenancy** — every supplier query scoped by `orgId`. A supplier belonging to a different org returns **404, never 403** — existence can't be inferred cross-org. A malformed id (not a valid ObjectId shape) gets a distinct **400**, so 400-vs-404 consistently means "bad input" vs. "not found/not yours," across `GET`/`PUT`/`PATCH`/`DELETE` alike.
+- **Supplier CRUD** — full create/read/update/delete, case-insensitive substring name search, category + country filters, pagination (`page`/`limit`, clamped to 100 max), express-validator on every mutable field including `contractExpiry` (added last, deliberately allows past dates).
+- **Dashboard** — a single MongoDB `$facet` aggregation (`GET /dashboard/stats`) computing total count, category breakdown, average risk score, 7/30-day new-supplier counts, a 30-day zero-filled growth series, and a 5-item recent-activity feed — no client-side aggregation. Frontend: KPI cards, a donut (category) + bar (growth) chart via recharts, activity feed, loading skeleton, empty state, responsive at 375/768/1440px breakpoints.
+- **Error handling** — centralized middleware, one envelope everywhere: success `{ success: true, data, message?, meta? }`, error `{ success: false, error: { message, code, details? } }`. Mongoose `CastError`→400, duplicate key→409 (all compound-index fields listed in the message, not just the first), `ValidationError`→400 with field-level details.
+- **UI component library** — `Button` (primary/secondary/danger variants + loading state), `Input` (label + inline error), `Modal`, `Card`, `Badge` — extracted from the pages that already used ad hoc versions of each, so styling is now DRY rather than duplicated per page.
+- **API docs** — Swagger UI at `/api-docs`, every endpoint documented with real request/response examples, reusable `User`/`Supplier`/`SuccessEnvelope`/`ErrorEnvelope` component schemas, Bearer security scheme, known-limitation notes inline on the documents/news/RAG endpoints (see Backlog below).
+
+Full pass/fail verification of all of the above is in [Phase 1 Complete — End-to-End Smoke Test](#-phase-1-complete--end-to-end-smoke-test-2026-08-01); the reasoning behind the RBAC/date/riskScore calls specifically is in [Key Decisions & Rationale](#key-decisions--rationale).
+
 ---
 
 # Remaining Work — Phase 2 (Intelligent Data Layer)
