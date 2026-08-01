@@ -137,15 +137,30 @@ Full pass/fail verification of all of the above is in [Phase 2 Complete — End-
 
 ---
 
-# Remaining Work — Phase 3 (Supplier Intelligence)
+# Remaining Work — Phase 3 (Supplier Intelligence) — ✅ COMPLETE (2026-08-02)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | News Aggregation | Integrate NewsAPI, RSS feeds, or GDELT for supplier monitoring. |
-| 🔴 | Sentiment Analysis | Analyze supplier-related news using AI/NLP models. |
-| 🔴 | Company Enrichment | Automatically collect supplier industry, location, and business metadata. |
-| 🔴 | Supplier Timeline | Maintain chronological history of supplier events and activities. |
-| 🔴 | Live Risk Updates | Automatically update supplier risk when new intelligence becomes available. |
+| 🟢 | News Aggregation | NewsAPI (real, working key) queried per-supplier by exact-phrase name match; found substantial unwired logic already built (`newsService.js`, `jobs/newsCron.js`) - fixed the schema gap that silently dropped fields, org-scoped it, added dedup and per-article failure isolation, and wired the cron into `index.js` (every 6h) plus a manual `POST /news/:supplierId/refresh` endpoint. |
+| 🟢 | Sentiment Analysis | Gemini-prompted structured classification (label + -1..1 score), extracted into its own `sentimentService.js`. A failing classification stores the article with `null` sentiment rather than losing it or the rest of the batch. |
+| 🟢 | Company Enrichment | Gemini-prompted industry/company-size/founded-year/summary via `POST /suppliers/:id/enrich`, stored on `Supplier.enrichment` with a re-runnable `enrichedAt` timestamp. UI clearly labels it "AI-generated - verify independently." |
+| 🟢 | Supplier Timeline | `GET /suppliers/:id/timeline` - aggregated on read from Supplier/Document/NewsCache/RiskHistory (no new event-log model, avoids a sync burden), merging 5 event types sorted most recent first. |
+| 🟢 | Live Risk Updates | Found a complete, reasonable weighted formula already built (`riskScoreService.js`) but only ever called from the dead cron. Rewired with a `RiskHistory` audit trail, a +/-15 per-update cap, and a 24h per-(supplier,reason) rate limit; triggered from both news ingestion and enrichment. |
+
+See [Phase 3 Complete — End-to-End Smoke Test](#-phase-3-complete--end-to-end-smoke-test-2026-08-02) below for the full verification results.
+
+## Phase 3 — Technical Summary
+
+**Major finding at the start of this phase:** a significant amount of News + Risk logic already existed but was completely unwired - `newsService.js` had a real NewsAPI + Gemini-sentiment integration, and `riskScoreService.js` had a complete weighted risk formula, but neither was ever called except by `jobs/newsCron.js`, which itself was never required anywhere (confirmed via a repo-wide grep). Verified everything live before building on top of it, per the same discipline established in Phase 2.
+
+- **News pipeline** - `NewsCache` was missing `url`/`source`/`orgId` fields the ingestion code was already trying to save (Mongoose silently dropped them); added them plus a numeric `sentimentScore`. Ingestion now dedupes by `supplierId`+`url` and isolates per-article failures (confirmed live against a real Gemini 429: the first article got real sentiment, the rest were stored with `null` sentiment instead of being lost). `jobs/newsCron.js` now actually runs, every 6 hours, guarded to no-op in demo mode.
+- **Sentiment** - moved out of `newsService.js` into its own `sentimentService.js`, upgraded from a bare word to structured JSON (label + numeric score) so the risk formula and UI both have something to work with.
+- **Enrichment** - Gemini directly, not a paid company-data API (Clearbit/OpenCorporates) - no new signup needed, matching the spec's own guidance to default to the no-key-required path. Explicitly does **not** feed the risk-scoring formula yet (no non-speculative signal for how industry/size should move a score without product input - see `TODO.md`).
+- **Timeline** - deliberately aggregation-based, not a dedicated event-log model, since every event type (`supplier_created`/`updated`, `document_uploaded`, `news_mentioned`, `risk_changed`) already has a source of truth elsewhere.
+- **Risk scoring** - same 40/30/20/10 weighted formula as the original unwired code (news sentiment / contract expiry / missing documents / country risk), now with a `RiskHistory` audit trail (previous/new score, delta, reason, and the four underlying factors - so "why did this change" is always answerable), a +/-15 cap per update, and a 24h rate limit per (supplier, reason) pair.
+- **Org-scoping** - checked explicitly on every new/touched route (`news.js` GET+POST, `suppliers.js` enrich+timeline), per the standing lesson from Phase 2's four-gap audit; none of the new Phase 3 endpoints repeated that mistake, all live-verified with a second org.
+
+Full pass/fail verification of all of the above is in [Phase 3 Complete — End-to-End Smoke Test](#-phase-3-complete--end-to-end-smoke-test-2026-08-02); open items (API keys/quotas, product decisions, known limitations) are tracked in `TODO.md`, not here.
 
 ---
 
@@ -348,15 +363,50 @@ Non-obvious calls made during Phase 2 hardening:
 - **Only a true zero-result vector search is retried, never a low-relevance one.** `$vectorSearch` returns the filter's top-k regardless of score, so a present-but-irrelevant result is a real answer (or a real "I don't know" from the model) and returns immediately. Only a genuinely empty result set — the signature of Atlas Search's indexing lag right after a fresh upload — triggers the 1s/2s/3s retry. Caveat, live-measured: the actual indexing lag in this environment sometimes exceeds the ~6s cumulative window these delays cover (one clean poll measured ~9.5s), so the fix substantially reduces but doesn't eliminate the false-negative window. Carried into the backlog below. (`server/services/ragService.js`)
 - **Four independent cross-org data-leak gaps were found and fixed** (`rag.js`, `news.js`, `documents.js` list, `documents.js` upload) — each live-exploited with two real orgs before being fixed, not assumed from code review. Same root cause every time: the route never checked `Supplier.findOne({_id, orgId})` before touching that supplier's data, despite the pattern being established elsewhere since Phase 1. See the Backlog for the structural recommendation.
 
-## Backlog — carried into Phase 3
+## Backlog — carried into Phase 3 (resolved/superseded, kept for history)
 
-Known, deferred issues. None block Phase 2 completion:
+- ~~`jobs/newsCron.js` never wired up~~ — **fixed in Phase 3**: wired into `index.js`, runs every 6h.
+- **Org-scoping is enforced per-route, not structurally** — still open. Phase 3 checked every new/touched route explicitly and didn't repeat the mistake, but the structural fix (shared middleware / lint rule) recommended here hasn't been built. Carried forward.
+- **No "create supplier" UI exists anywhere in the frontend** — still open, unrelated to Phase 3, not touched.
+- **Atlas Search indexing lag isn't fully covered by the RAG retry fix** — still open, unrelated to Phase 3, not touched.
+- **Gemini free-tier `generate_content` quota (20/day)** — still relevant, and hit repeatedly again during Phase 3 (sentiment classification, enrichment). See `TODO.md` for the current state.
 
-- **`jobs/newsCron.js` never wired up** — not required anywhere in the app or any npm script, so `NewsCache` is never populated in real DB mode; `GET /news/:supplierId` returns an empty array for every real supplier until this job is actually started somewhere.
-- **Org-scoping is enforced per-route, not structurally, and has already been missed independently four times** (`rag.js`, `news.js`, `documents.js` list, `documents.js` upload) despite an established pattern (`findOrgSupplier` / `Supplier.findOne({_id, orgId})`) existing elsewhere in the codebase since Phase 1. Each miss was a real, live-verified cross-org data leak (or, for the upload route, a cross-org write), not a theoretical one. Four independent misses of the same pattern is a signal the pattern itself is too easy to forget, not that four people were careless. Recommend for a future pass: either a shared middleware that resolves the supplier via an org-scoped lookup and attaches it as `req.supplier` (so a route literally cannot touch supplier data without going through the org check first), or at minimum a lint rule / code review checklist item requiring org-scoping on any route taking a supplier-related param.
-- **No "create supplier" UI exists anywhere in the frontend** — only edit (`SupplierDetail.jsx`) and delete are wired up. Confirmed during Phase 2 smoke testing: test suppliers had to be created via direct API call (`POST /suppliers`), since there's no form/button in the client to do it. Worth addressing in a future UI pass.
-- **Atlas Search indexing lag isn't fully covered by the RAG retry fix.** The retry in `ragService.js` (1s/2s/3s delays, ~6s cumulative) helps but a direct poll measured the real lag at ~9.5s in this environment — meaningfully longer than when first characterized (~6-7s) during the smoke test. A user asking a question immediately after upload can still occasionally hit the false "couldn't find" response. Worth either extending the delays or adding a post-upload "still indexing" UI notice.
-- **Gemini free-tier `generate_content` quota (20/day) is easy to exhaust during heavy testing** — hit mid-session while verifying the retry fix, surfacing as an unrelated `500`/`429` on the RAG endpoint. Not a code defect (the app correctly surfaces the real error rather than faking success), but worth knowing before attributing a RAG failure to the pipeline itself during future test passes.
+---
+
+# ✅ Phase 3 Complete — End-to-End Smoke Test (2026-08-02)
+
+Every item from the Phase 3 plan above (news aggregation, sentiment, enrichment, timeline, live risk updates) has been implemented, hardened, and verified against real Atlas data, real NewsAPI calls, and real Gemini calls (where quota allowed) - not just code review.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | News fetch + sentiment + storage for a real supplier | 🟢 PASS | Real NewsAPI articles fetched and stored (org-scoped), first article got real Gemini sentiment before quota exhaustion, remaining articles gracefully stored with `null` sentiment instead of being lost |
+| 2 | Dedup on repeated fetch | 🟢 PASS | Re-running refresh on the same supplier fetched 5 articles from NewsAPI but stored 0 new ones |
+| 3 | Risk score formula + cap + rate limit | 🟢 PASS | Verified the raw formula matches exactly (e.g. a raw target of 84 from a starting score of 0 was correctly capped to 15), and an immediate second update with the same reason was correctly skipped as rate-limited |
+| 4 | Timeline merges all 5 event types | 🟢 PASS | A real supplier accumulating a document upload, news articles, a manual edit, and a risk change all appeared correctly, sorted most recent first |
+| 5 | Company enrichment | 🟡 Code-verified, not data-verified | The endpoint, JSON parsing, and error handling all work correctly (confirmed live: a real Gemini 429 correctly surfaced as a real error, not a fake success) - but the Gemini daily quota was exhausted before a successful enrichment response could be captured this session. Needs a follow-up check with fresh quota; tracked in `TODO.md` |
+| 6 | Cross-org access blocked on every new/touched endpoint | 🟢 PASS | `news.js` (GET + refresh), `suppliers.js` (enrich + timeline) all correctly 404 for a second org, re-verified in the final pass |
+| 7 | Zero unexpected console errors (Playwright) | 🟢 PASS | The only console line seen was the browser's own default logging of a real, intentionally-triggered 500 (Gemini quota) during the enrichment UI test - not an application bug, same category noted in the Phase 1/2 smoke tests |
+
+All test data (suppliers, users, orgs, documents, news, risk history) created during testing was cleaned from Atlas afterward.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 3:
+
+- **Enrichment doesn't feed the risk-scoring formula.** There's no non-speculative signal for how industry/company-size/founding-year should move a risk score without real product input - implemented as a recompute-for-freshness trigger only. Noted in `TODO.md` as a product decision, not a technical one. (`server/routes/suppliers.js`)
+- **Risk score changes are capped at +/-15 per update and rate-limited to once per (supplier, reason) per 24h.** Guards against a burst of negative news (or a batch cron run) producing a nonsensical single-step jump - the score still moves toward the "correct" weighted value, just gradually. Live-verified both guards independently. (`server/services/riskScoreService.js`)
+- **Timeline is aggregated on read, not a dedicated event-log model.** Every event type (supplier created/updated, document uploaded, news mentioned, risk changed) already has a source of truth in an existing collection - a separate model would just duplicate data and need to stay in sync. (`server/routes/suppliers.js`)
+- **Gemini over a paid company-data API for enrichment**, and **the NewsAPI key already in `.env` used directly rather than building the keyless GDELT/RSS fallback** - both chosen because the primary path (a real, working key/no-new-signup) was available, per the spec's own guidance to default to the no-key-required or already-available path rather than block progress. Both are revisable; see `TODO.md`.
+- **`TODO.md` introduced this phase** as the single place for anything genuinely blocked on a human decision (API keys, product tradeoffs, infrastructure/billing, known limitations) - kept separate from this file's historical backlog sections so open items don't get lost in a growing document.
+
+## Backlog — carried into Phase 4
+
+See `TODO.md` at the repo root for the full, current list of open items (it supersedes this section going forward - kept here only for the org-scoping/create-supplier-UI items that predate `TODO.md`'s introduction):
+
+- **Org-scoping is still enforced per-route, not structurally.** Recommendation unchanged from Phase 2: a shared middleware that resolves the supplier via an org-scoped lookup and attaches it as `req.supplier`, or at minimum a lint rule / review checklist item.
+- **No "create supplier" UI.**
 
 ---
 
