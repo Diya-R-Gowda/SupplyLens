@@ -19,6 +19,14 @@ const options = {
         "existence can't be inferred across organisations.",
     },
     servers: [{ url: '/api', description: 'Same-origin API base path' }],
+    tags: [
+      { name: 'Auth', description: 'Registration, login, token refresh, and logout.' },
+      { name: 'Suppliers', description: 'Org-scoped supplier CRUD, search, filtering, and pagination.' },
+      { name: 'Dashboard', description: 'Aggregated supplier statistics for the dashboard UI.' },
+      { name: 'Documents', description: 'Contract PDF upload and ingestion for a supplier.' },
+      { name: 'News', description: 'Cached news/sentiment items for a supplier.' },
+      { name: 'RAG', description: 'Ask questions about a supplier\'s ingested contract documents.' },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -91,7 +99,9 @@ const options = {
       },
     },
   },
-  apis: [path.join(__dirname, '../routes/*.js')],
+  // glob (used internally by swagger-jsdoc) only matches forward-slash patterns,
+  // so path.join's backslashes on Windows must be normalized before use.
+  apis: [path.join(__dirname, '../routes/*.js').split(path.sep).join('/')],
 };
 
 module.exports = swaggerJsdoc(options);
