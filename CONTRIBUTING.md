@@ -107,17 +107,33 @@ Full pass/fail verification of all of the above is in [Phase 1 Complete — End-
 
 ---
 
-# Remaining Work — Phase 2 (Intelligent Data Layer)
+# Remaining Work — Phase 2 (Intelligent Data Layer) — ✅ COMPLETE (2026-08-02)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | PDF Upload Pipeline | Support secure upload and storage of supplier documents. |
-| 🔴 | PDF Parsing | Extract text and metadata from uploaded supplier documents. |
-| 🔴 | Document Chunking | Split documents into embedding-ready chunks for semantic search. |
-| 🔴 | Embedding Generation | Generate vector embeddings using Gemini Embedding models. |
-| 🔴 | MongoDB Atlas Search | Store embeddings in Atlas Vector Search for efficient retrieval. |
-| 🔴 | RAG Chatbot | Build Retrieval-Augmented Generation chatbot using supplier documents. |
-| 🔴 | Conversation Memory | Maintain contextual conversations across user interactions. |
+| 🟢 | PDF Upload Pipeline | Original PDF binary stored in GridFS on upload, before parsing runs; failed ingestion cleans up the GridFS file so nothing is orphaned. Org-scoped upload/list/delete/retrieve endpoints. |
+| 🟢 | PDF Parsing | Rewritten to use `pdf-parse` v2's actual `PDFParse` class API (the installed version isn't a callable function like v1) — extracts text and page count from a real buffer. |
+| 🟢 | Document Chunking | Fixed-size chunking (~2000 chars, 200-char overlap) in `ingestService.js`; each chunk records its parent `docId` so a single document's chunks can be deleted independently. |
+| 🟢 | Embedding Generation | `gemini-embedding-001`, called with `outputDimensionality: 768` to match the existing Atlas index dimension (native output is 3072). |
+| 🟢 | MongoDB Atlas Vector Search | `default` index (768-dim, cosine, `supplierId` filter) recreated on `docchunks` — the collection Mongoose actually writes to (a same-named index existed on an orphaned `doc_chunks` collection and was dropped). |
+| 🟢 | RAG Chatbot | Real `$vectorSearch` + `gemini-flash-latest` generation, grounded answers with source-filename attribution, retries on a true zero-result response to ride out Atlas Search's indexing lag. |
+| 🟢 | Conversation Memory | `Conversation` model (supplierId/orgId/userId/messages), multi-turn context via an 8-message history window, private per-user, list/resume/new-conversation wired into the real UI. |
+
+See [Phase 2 Complete — End-to-End Smoke Test](#-phase-2-complete--end-to-end-smoke-test-2026-08-02) below for the full verification results.
+
+## Phase 2 — Technical Summary
+
+**Stack additions this phase:** GridFS (`mongoose.mongo.GridFSBucket`) for PDF binary storage, no new npm packages — `pdf-parse` v2 and `@google/generative-ai` were already installed but unused/broken.
+
+- **Gemini models** — both call sites in `embedService.js` were pointed at models that no longer exist for this API key (`text-embedding-004`, `gemini-1.5-flash`). Fixed to `gemini-embedding-001` (embedding) and `gemini-flash-latest` (generation). Note: `gemini-2.5-flash` was tried first for generation and failed live ("no longer available to new users") despite being listed in `ListModels` — the `-latest` alias proved more reliable for this key.
+- **Vector search index** — audited and found the real, `READY` Atlas index was sitting on `doc_chunks` (an empty, orphaned collection) while the Mongoose model actually writes to `docchunks`. Recreated the identical index definition on `docchunks` and dropped the orphaned one, verified via `listSearchIndexes()`.
+- **Ingestion pipeline** — `ingestService.js` was calling `pdf-parse` v1-style (`pdf(buffer)`), but the installed v2 exports a `PDFParse` class; every real upload 500'd. Rewritten to instantiate `PDFParse`, call `getText()`, and `destroy()` the parser when done. Restructured so the `Document` record is created *before* its chunks, so each `DocChunk.docId` is populated (needed later for per-document deletion).
+- **GridFS storage** — original PDF binaries are streamed into a `pdfDocuments` bucket on upload (before the parse/chunk/embed pipeline runs), with the file id stored on the `Document` record. A new org-scoped `GET /suppliers/:id/documents/:docId/file` streams it back; `DELETE /documents/:supplierId/:docId` (new — no delete endpoint existed for documents before) removes the Document, its DocChunks, and its GridFS file together, so nothing is ever orphaned either direction.
+- **RAG pipeline** — `ragService.js` embeds the question, runs `$vectorSearch` filtered by `supplierId`, retries specifically on a **true zero-result** response (3 attempts, 1s/2s/3s delays, ~6s cumulative) to cover Atlas Search's asynchronous indexing lag — live-measured at ~6–10s for a just-uploaded chunk. A non-empty but low-relevance result is never retried; it returns immediately and Gemini itself is instructed to say "I don't know" rather than hallucinate. Each answer records the distinct source filenames it was grounded in.
+- **Conversation memory** — a `Conversation` document per chat thread (`supplierId`, `orgId`, `userId`, `messages[]`). The RAG endpoint accepts an optional `conversationId` (omit to start a new one), passes the last 8 messages (4 exchanges) as history so follow-ups like "why is it that high?" resolve correctly, and appends both turns after generating. Conversations are **private per-user** — scoped by `supplierId + orgId + userId`, not shared org-wide, since nothing anywhere suggested org-wide shared chat history was intended. `GET /suppliers/:id/conversations` lists a user's own past conversations for a supplier; `RagChatDrawer.jsx` was rewired to send/receive real history instead of keeping it purely local, with a "New" button and a resume dropdown.
+- **Org-scoping security fixes** — audited every route taking a `supplierId`/`id` param after finding `rag.js` missed the org-scoped lookup pattern used everywhere else; live-exploited (with two real orgs) and fixed three more identical gaps: `GET /news/:supplierId`, `GET /documents/:supplierId` (list), and `POST /documents/upload/:supplierId`. All four now use the same `Supplier.findOne({_id, orgId})` → 404 pattern as `suppliers.js`. Four independent misses of an established pattern is flagged in the Backlog as a signal the pattern itself needs to be structural, not just conventional.
+
+Full pass/fail verification of all of the above is in [Phase 2 Complete — End-to-End Smoke Test](#-phase-2-complete--end-to-end-smoke-test-2026-08-02); the reasoning behind the conversation-privacy, history-window, and retry-delay calls specifically is in [Key Decisions & Rationale](#key-decisions--rationale-1).
 
 ---
 
@@ -301,15 +317,46 @@ Non-obvious calls made during Phase 1 hardening, kept here so the reasoning isn'
 
 - **`riskScore` was validated but silently dropped on create.** `POST /suppliers` ran `riskScore` through `express-validator`, but the handler's destructure of `req.body` never actually included it, so every created supplier silently fell back to the schema default (`0`) no matter what was sent. Fixed in both the real-DB and demo-mode create paths. Worth remembering as a bug *category*, not just a one-off: a field can be fully validated and still never reach persistence — the same audit (checking every validated field against what's actually saved) is worth re-running whenever a create/update handler changes. (`server/routes/suppliers.js`, `server/services/demoStore.js`)
 
-## Backlog — carried into Phase 2
+---
 
-Known, deferred issues. None block Phase 1 completion; all are pre-existing gaps in the Phase 2 (Intelligent Data Layer) surface area:
+# ✅ Phase 2 Complete — End-to-End Smoke Test (2026-08-02)
 
-- **`pdf-parse` v2 API mismatch** (`server/services/ingestService.js`) — still calls `pdf(buffer)` the v1 way; the installed v2 exports a `PDFParse` class instead of a callable function. Real (non-demo) document upload/ingestion 500s until fixed.
-- **Gemini `text-embedding-004`** (`server/services/embedService.js`) — used for both ingestion and RAG query embedding; last known to be failing. Blocks real RAG independently of the pdf-parse fix.
+Every item from the Phase 2 plan above (PDF pipeline, parsing, chunking, embeddings, vector search, RAG, conversation memory) has since been implemented, hardened, and verified — including a dedicated security audit that found and fixed real cross-org data leaks. This is the final full end-to-end smoke test run on `main` against **real Atlas data** (not demo mode) before moving on to Phase 3.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Register → create supplier → upload real PDF → full pipeline | 🟢 PASS | GridFS storage, `pdf-parse` extraction, chunking, real 768-dim embeddings, and Atlas index (`default`, `READY`/`queryable`) all confirmed end-to-end |
+| 2 | Real question via the actual UI, grounded answer + source | 🟡 PASS with caveat | Correct once the just-uploaded chunk was indexed; the very first question asked immediately after upload could get a false "couldn't find" response due to Atlas Search's indexing lag — see the retry fix and its own caveat below |
+| 3 | Follow-up question, context carries over | 🟢 PASS | "Why is it that high?" correctly resolved against the prior answer via conversation history |
+| 4 | Irrelevant question, honest "not found" | 🟢 PASS | No hallucination — the model explicitly says it doesn't know rather than fabricating an answer |
+| 5 | Cross-org access blocked on every document/rag/news route | 🟢 PASS | Re-tested all 4 previously-fixed gaps (`rag.js`, `news.js`, `documents` list, `documents` upload) plus the conversations endpoint — all correctly 404 for an outsider org, no regression |
+| 6 | Conversation list/resume/new-conversation via the real UI | 🟢 PASS | "New" clears the chat and starts a genuinely separate `Conversation` document; the dropdown lists past conversations and resuming one replays full history |
+| 7 | Delete document → GridFS + chunks + Document record gone | 🟢 PASS | Confirmed at the DB level (all three absent) and via UI reload |
+| 8 | Zero console errors throughout (Playwright) | 🟢 PASS | Empty across every register/upload/chat/delete run |
+
+All test data (orgs, suppliers, documents, chunks, GridFS files, conversations) created during testing was cleaned from Atlas afterward.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 2 hardening:
+
+- **Conversations are private per-user, not shared across an org.** Scoped by `supplierId + orgId + userId`. There's no evidence anywhere (schema, docs, frontend) that org-wide shared chat history was intended, and it's the safer default absent a stated requirement otherwise. Verified live: a second user in the *same* org gets an empty conversation list and a `404` when trying to continue the first user's conversation by id, while still being able to start their own new one on the same supplier. (`server/models/Conversation.js`, `server/routes/rag.js`, `server/routes/suppliers.js`)
+- **Conversation history window is capped at 8 messages (4 exchanges).** A follow-up like "why is it that high?" almost always refers to the immediately preceding answer, not something many turns back — capping bounds prompt size and Gemini token cost regardless of how long a conversation runs, while still covering a short multi-step clarification thread. (`server/services/ragService.js`)
+- **`gemini-flash-latest` over the pinned `gemini-2.5-flash`.** The explicit version looked more stable on paper but failed live ("no longer available to new users") despite being listed in `ListModels`; the `-latest` alias proved reliable for this API key. Chosen empirically, not by preference. (`server/services/embedService.js`)
+- **Only a true zero-result vector search is retried, never a low-relevance one.** `$vectorSearch` returns the filter's top-k regardless of score, so a present-but-irrelevant result is a real answer (or a real "I don't know" from the model) and returns immediately. Only a genuinely empty result set — the signature of Atlas Search's indexing lag right after a fresh upload — triggers the 1s/2s/3s retry. Caveat, live-measured: the actual indexing lag in this environment sometimes exceeds the ~6s cumulative window these delays cover (one clean poll measured ~9.5s), so the fix substantially reduces but doesn't eliminate the false-negative window. Carried into the backlog below. (`server/services/ragService.js`)
+- **Four independent cross-org data-leak gaps were found and fixed** (`rag.js`, `news.js`, `documents.js` list, `documents.js` upload) — each live-exploited with two real orgs before being fixed, not assumed from code review. Same root cause every time: the route never checked `Supplier.findOne({_id, orgId})` before touching that supplier's data, despite the pattern being established elsewhere since Phase 1. See the Backlog for the structural recommendation.
+
+## Backlog — carried into Phase 3
+
+Known, deferred issues. None block Phase 2 completion:
+
 - **`jobs/newsCron.js` never wired up** — not required anywhere in the app or any npm script, so `NewsCache` is never populated in real DB mode; `GET /news/:supplierId` returns an empty array for every real supplier until this job is actually started somewhere.
 - **Org-scoping is enforced per-route, not structurally, and has already been missed independently four times** (`rag.js`, `news.js`, `documents.js` list, `documents.js` upload) despite an established pattern (`findOrgSupplier` / `Supplier.findOne({_id, orgId})`) existing elsewhere in the codebase since Phase 1. Each miss was a real, live-verified cross-org data leak (or, for the upload route, a cross-org write), not a theoretical one. Four independent misses of the same pattern is a signal the pattern itself is too easy to forget, not that four people were careless. Recommend for a future pass: either a shared middleware that resolves the supplier via an org-scoped lookup and attaches it as `req.supplier` (so a route literally cannot touch supplier data without going through the org check first), or at minimum a lint rule / code review checklist item requiring org-scoping on any route taking a supplier-related param.
 - **No "create supplier" UI exists anywhere in the frontend** — only edit (`SupplierDetail.jsx`) and delete are wired up. Confirmed during Phase 2 smoke testing: test suppliers had to be created via direct API call (`POST /suppliers`), since there's no form/button in the client to do it. Worth addressing in a future UI pass.
+- **Atlas Search indexing lag isn't fully covered by the RAG retry fix.** The retry in `ragService.js` (1s/2s/3s delays, ~6s cumulative) helps but a direct poll measured the real lag at ~9.5s in this environment — meaningfully longer than when first characterized (~6-7s) during the smoke test. A user asking a question immediately after upload can still occasionally hit the false "couldn't find" response. Worth either extending the delays or adding a post-upload "still indexing" UI notice.
+- **Gemini free-tier `generate_content` quota (20/day) is easy to exhaust during heavy testing** — hit mid-session while verifying the retry fix, surfacing as an unrelated `500`/`429` on the RAG endpoint. Not a code defect (the app correctly surfaces the real error rather than faking success), but worth knowing before attributing a RAG failure to the pipeline itself during future test passes.
 
 ---
 
