@@ -5,31 +5,44 @@ product calls with real tradeoffs, infrastructure/billing, and known
 limitations carried forward. Everything else that came up during Phase 3
 was either implemented or fixed outright; this file only holds what's left.
 
-Last updated: 2026-08-02 (end of Phase 3 — Supplier Intelligence).
+Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 2.5 Flash-Lite).
 
 ## 1. API keys / signups only you can do
 
-**None required right now.** Both external services Phase 3 needed already
-had working keys in `.env`:
-- `NEWS_API_KEY` — confirmed live against `newsapi.org/v2/everything`, real articles returned.
-- `GEMINI_API_KEY` — confirmed live (embeddings, generation, sentiment classification all worked when quota allowed).
-
-See the infrastructure section below, though — both are currently on
-**free tiers with limits that were hit repeatedly during this phase's own
-testing**, which will matter for real usage.
+- **`CURRENTS_API_KEY` — you need to sign up for this.** News fetching was
+  switched from NewsAPI to [Currents API](https://currentsapi.services/)
+  (free tier: ~600-1,000 requests/day and explicitly allows commercial use,
+  vs. NewsAPI's 100/day + non-production ToS). `server/services/newsService.js`
+  now calls `https://api.currentsapi.services/v1/search` and reads the key
+  from `process.env.CURRENTS_API_KEY`, which is currently **blank** in `.env`
+  — news fetching (cron + manual refresh) will no-op with a console warning
+  until you add a real key. Sign up at currentsapi.services, then set
+  `CURRENTS_API_KEY=...` in `.env`.
+- `GEMINI_API_KEY` — still fine, no action needed. Generation calls are now
+  pinned to `gemini-3.5-flash-lite` instead of the `gemini-flash-latest`
+  alias, which should raise the effective free-tier daily quota well above
+  the ~20 requests/day the alias resolved to. (Tried `gemini-2.5-flash-lite`
+  first per the general 2026 guidance on lite-model quotas, but it 404s as
+  deprecated for this account — `gemini-3.5-flash-lite` is the current
+  working lite model, confirmed live for both plain generation and
+  structured-JSON sentiment classification.) Not yet re-verified against a
+  full day of real usage.
+- The old `NEWS_API_KEY` entry has been removed from `.env` — safe to delete
+  the underlying NewsAPI key/account whenever convenient, nothing in the
+  code references it anymore.
 
 ## 2. Product / business decisions (implemented my recommended default — revisable)
 
 - **Enrichment data doesn't feed the risk-scoring formula.** Recomputing risk after enrichment currently only refreshes the *existing* news/expiry/document/country formula — it doesn't use industry, company size, or founding year as inputs. I didn't see a non-speculative way to decide "how much riskier is a startup than an enterprise" or "how much riskier is industry X than Y" without real product/business input. Recommendation: if this matters, a starting point would be a small per-industry risk weight table (like `countryRisk.json`), but that needs someone to actually decide the weights.
 - **Gemini over a paid company-data API (Clearbit/OpenCorporates) for enrichment.** Ships now with no new signup, but accuracy is unverified and it can hallucinate (labeled "AI-generated — verify independently" in the UI). If enrichment accuracy becomes important, a real company-data provider would be more reliable — but needs a signup/key (see below) and probably a paid tier for meaningful coverage.
 - **Risk score cap (±15/update) and rate limit (1 change per supplier+reason per 24h) are first-pass defaults**, not tuned against real usage data. If risk scores feel too sluggish or too jumpy in practice, these two constants (`MAX_SCORE_DELTA`, `RATE_LIMIT_MS` in `server/services/riskScoreService.js`) are the knobs to turn.
-- **NewsAPI's real, keyless GDELT/RSS fallback was not built.** The spec asked for one only if the provided key was broken — it isn't, so I didn't build a fallback path to keep scope contained. If NewsAPI's cost or quota becomes a problem later, GDELT (`https://api.gdeltproject.org/api/v2/doc/doc`, free/keyless) is the natural addition.
-- **News search uses exact-phrase matching on the supplier name** (`"Company Name"` quoted in the NewsAPI query). Reduces false-positive matches against unrelated same-word companies, but could miss articles that refer to the company differently (abbreviations, former names). Not tuned against real supplier names beyond the well-known test companies used this session.
+- **A keyless GDELT/RSS fallback was not built.** Only needed if Currents' key/quota becomes a blocker — GDELT (`https://api.gdeltproject.org/api/v2/doc/doc`, free/keyless) is the natural addition if so.
+- **News search now uses Currents' `keywords` param with the plain supplier name** (switched from NewsAPI's quoted exact-phrase `q` param, since Currents' search endpoint doesn't document phrase-exact matching the same way). This may be looser than the old exact-phrase match — worth watching for false-positive matches against unrelated same-word companies once a real key is in place and this can be tested against real supplier names.
 
 ## 3. Infrastructure / paid tier (needs your account, billing, or both)
 
-- **Gemini API free-tier quota (20 `generateContent` requests/day) was exhausted multiple times during this single session's testing** — it's shared across RAG answers, sentiment classification, and enrichment. This is the single biggest practical limiter right now: real usage beyond a handful of requests/day needs a paid Gemini plan. (Embeddings are a separate quota and weren't affected.)
-- **NewsAPI's free "Developer" plan caps at 100 requests/day and its own ToS restricts it to non-production use.** Fine for continued development, but a paid plan would be needed before any real deployment.
+- **Gemini API free-tier quota was hit repeatedly during Phase 3 testing** (~20 `generateContent` requests/day on the `gemini-flash-latest` alias) — shared across RAG answers, sentiment classification, and enrichment. Now pinned to `gemini-2.5-flash-lite` instead, which should raise this to ~1,000/day for free. If that's still not enough for real usage, a paid Gemini plan is the next step. (Embeddings are a separate quota and weren't affected either way.)
+- **NewsAPI's free tier (100/day, non-production ToS) was replaced with Currents API** (~600-1,000/day, commercial use allowed) — see section 1, needs a key. If Currents' limits are ever hit in practice, their paid tiers are the next step.
 - **A real company-data API** (if you want more reliable enrichment than Gemini's best-effort research) would need its own signup and likely a paid tier for useful coverage — see the product-decision note above.
 
 ## 4. Known limitations / deferred work

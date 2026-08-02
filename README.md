@@ -91,7 +91,7 @@ Every supplier receives a nightly **0–100 risk score**.
 
 A scheduled background worker:
 
-- Polls NewsAPI
+- Polls Currents API
 - Finds supplier-related news
 - Uses Google Gemini for sentiment analysis
 - Updates supplier risk automatically
@@ -143,7 +143,7 @@ MongoDB Atlas                          Google Gemini API
    Node Cron Jobs
          |
          ▼
-NewsAPI + Sentiment Analysis
+Currents API + Sentiment Analysis
 ```
 
 ---
@@ -216,7 +216,7 @@ JWT_SECRET=your_jwt_secret
 
 GEMINI_API_KEY=your_google_gemini_key
 
-NEWS_API_KEY=your_newsapi_key
+CURRENTS_API_KEY=your_currents_api_key
 ```
 
 Run the backend.

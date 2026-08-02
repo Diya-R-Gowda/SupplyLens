@@ -2,7 +2,7 @@ const axios = require('axios');
 const NewsCache = require('../models/NewsCache');
 const { classifyHeadlineSentiment } = require('./sentimentService');
 
-const NEWSAPI_BASE_URL = 'https://newsapi.org/v2/everything';
+const CURRENTS_BASE_URL = 'https://api.currentsapi.services/v1/search';
 
 // Fetches recent news for a supplier by name, classifies each article's
 // sentiment, and stores new articles in NewsCache (org-scoped, deduplicated
@@ -11,23 +11,22 @@ const NEWSAPI_BASE_URL = 'https://newsapi.org/v2/everything';
 // callers (the cron job, the manual refresh endpoint) both need to keep
 // going for other suppliers even if one fails.
 exports.fetchAndSentimentTagNews = async (supplier) => {
-  if (!process.env.NEWS_API_KEY) {
-    console.warn(`Skipping news fetch for "${supplier.name}": NEWS_API_KEY not set`);
+  if (!process.env.CURRENTS_API_KEY) {
+    console.warn(`Skipping news fetch for "${supplier.name}": CURRENTS_API_KEY not set`);
     return { fetched: 0, stored: 0 };
   }
 
   let articles;
   try {
-    const response = await axios.get(NEWSAPI_BASE_URL, {
+    const response = await axios.get(CURRENTS_BASE_URL, {
       params: {
-        q: `"${supplier.name}"`,
+        keywords: supplier.name,
         language: 'en',
-        sortBy: 'publishedAt',
-        pageSize: 5,
-        apiKey: process.env.NEWS_API_KEY,
+        page_size: 5,
+        apiKey: process.env.CURRENTS_API_KEY,
       },
     });
-    articles = response.data.articles || [];
+    articles = response.data.news || [];
   } catch (err) {
     console.error(`News fetch failed for "${supplier.name}":`, err.response?.data?.message || err.message);
     return { fetched: 0, stored: 0 };
@@ -52,15 +51,19 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
         console.error(`Sentiment classification failed for "${article.title}":`, sentimentErr.message);
       }
 
+      // Currents doesn't return a separate publisher name field - fall back
+      // to the article's domain when no author byline is present.
+      const source = article.author || new URL(article.url).hostname;
+
       await NewsCache.create({
         supplierId: supplier._id,
         orgId: supplier.orgId,
         headline: article.title,
         url: article.url,
-        source: article.source?.name,
+        source,
         sentiment,
         sentimentScore,
-        publishedAt: article.publishedAt ? new Date(article.publishedAt) : new Date(),
+        publishedAt: article.published ? new Date(article.published) : new Date(),
       });
       stored += 1;
     } catch (articleErr) {
