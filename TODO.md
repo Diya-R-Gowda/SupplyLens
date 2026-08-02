@@ -5,19 +5,16 @@ product calls with real tradeoffs, infrastructure/billing, and known
 limitations carried forward. Everything else that came up during Phase 3
 was either implemented or fixed outright; this file only holds what's left.
 
-Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 2.5 Flash-Lite).
+Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 3.5 Flash-Lite).
 
 ## 1. API keys / signups only you can do
 
-- **`CURRENTS_API_KEY` — you need to sign up for this.** News fetching was
-  switched from NewsAPI to [Currents API](https://currentsapi.services/)
-  (free tier: ~600-1,000 requests/day and explicitly allows commercial use,
-  vs. NewsAPI's 100/day + non-production ToS). `server/services/newsService.js`
-  now calls `https://api.currentsapi.services/v1/search` and reads the key
-  from `process.env.CURRENTS_API_KEY`, which is currently **blank** in `.env`
-  — news fetching (cron + manual refresh) will no-op with a console warning
-  until you add a real key. Sign up at currentsapi.services, then set
-  `CURRENTS_API_KEY=...` in `.env`.
+**None required right now.** Both keys are live in `.env`:
+- `CURRENTS_API_KEY` — added and confirmed live against `api.currentsapi.services/v1/search`
+  (real articles returned for a real supplier name, correct `title`/`url`/`author`/`published`
+  shape). News fetching (cron + manual refresh) is fully functional again after the
+  switch from NewsAPI (which had a 100/day cap + non-production ToS restriction;
+  Currents' free tier is ~600-1,000 requests/day and allows commercial use).
 - `GEMINI_API_KEY` — still fine, no action needed. Generation calls are now
   pinned to `gemini-3.5-flash-lite` instead of the `gemini-flash-latest`
   alias, which should raise the effective free-tier daily quota well above
