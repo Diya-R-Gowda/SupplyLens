@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { RiskBadge } from '../components/RiskBadge';
+import { HealthBadge } from '../components/HealthBadge';
 import NewsPanel from '../components/NewsPanel';
 import RagChatDrawer from '../components/RagChatDrawer';
 import Button from '../components/Button';
@@ -72,6 +73,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
 
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
+  const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
 
   const loadTimeline = () => {
     api.get(`/suppliers/${supplierId}/timeline`).then((res) => setTimeline(res.data.data || [])).catch(() => setTimeline([]));
@@ -223,11 +225,20 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
         <div className="flex justify-between items-center gap-3">
           <Button onClick={onBack} className={pillButtonClass}>Back</Button>
           <div className="grid gap-1 justify-items-end">
-            <RiskBadge score={supplier.riskScore} />
+            <div className="flex items-center gap-2">
+              <RiskBadge score={supplier.riskScore} />
+              <HealthBadge score={supplier.healthScore ?? 50} />
+            </div>
             {lastRiskChange ? (
               <span className="text-[0.78rem] text-slate-500 text-right max-w-[280px]">
-                {lastRiskChange.delta > 0 ? '+' : ''}{lastRiskChange.delta} from {lastRiskChange.previousScore} on{' '}
+                Risk {lastRiskChange.delta > 0 ? '+' : ''}{lastRiskChange.delta} from {lastRiskChange.previousScore} on{' '}
                 {new Date(lastRiskChange.timestamp).toLocaleDateString()} ({lastRiskChange.reason?.replace(/_/g, ' ')})
+              </span>
+            ) : null}
+            {lastHealthChange ? (
+              <span className="text-[0.78rem] text-slate-500 text-right max-w-[280px]">
+                Health {lastHealthChange.delta > 0 ? '+' : ''}{lastHealthChange.delta} from {lastHealthChange.previousScore} on{' '}
+                {new Date(lastHealthChange.timestamp).toLocaleDateString()} ({lastHealthChange.reason?.replace(/_/g, ' ')})
               </span>
             ) : null}
           </div>

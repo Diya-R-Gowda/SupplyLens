@@ -1,6 +1,6 @@
 import Card from './Card';
 import Badge from './Badge';
-import { FileText, Newspaper, TrendingUp, PlusCircle, Pencil, Activity } from 'lucide-react';
+import { FileText, Newspaper, TrendingUp, HeartPulse, PlusCircle, Pencil, Activity } from 'lucide-react';
 
 const EVENT_META = {
   supplier_created: { label: 'Created', icon: PlusCircle, badgeClass: 'bg-blue-100 text-blue-700' },
@@ -8,6 +8,7 @@ const EVENT_META = {
   document_uploaded: { label: 'Document', icon: FileText, badgeClass: 'bg-indigo-100 text-indigo-700' },
   news_mentioned: { label: 'News', icon: Newspaper, badgeClass: 'bg-slate-200 text-slate-700' },
   risk_changed: { label: 'Risk change', icon: TrendingUp, badgeClass: 'bg-amber-100 text-amber-800' },
+  health_changed: { label: 'Health change', icon: HeartPulse, badgeClass: 'bg-emerald-100 text-emerald-800' },
 };
 
 const describeEvent = (event) => {
@@ -22,6 +23,8 @@ const describeEvent = (event) => {
       return event.headline;
     case 'risk_changed':
       return `Risk score ${event.delta > 0 ? 'increased' : 'decreased'} from ${event.previousScore} to ${event.newScore} (${event.reason?.replace(/_/g, ' ')})`;
+    case 'health_changed':
+      return `Health score ${event.delta > 0 ? 'increased' : 'decreased'} from ${event.previousScore} to ${event.newScore} (${event.reason?.replace(/_/g, ' ')})`;
     default:
       return 'Event';
   }
@@ -52,6 +55,11 @@ export default function Timeline({ events }) {
               {event.type === 'risk_changed' && event.factors ? (
                 <span className="text-[0.78rem] text-slate-500">
                   Factors - news: {event.factors.newsScore}, contract expiry: {event.factors.expiryScore}, documents: {event.factors.docScore}, country: {event.factors.countryScore}
+                </span>
+              ) : null}
+              {event.type === 'health_changed' && event.factors ? (
+                <span className="text-[0.78rem] text-slate-500">
+                  Factors - ESG: {event.factors.esgScore}, logistics: {event.factors.logisticsScore}, documents: {event.factors.docCompletenessScore}, contract: {event.factors.contractHealthScore}, risk-inverse: {event.factors.riskComponent}
                 </span>
               ) : null}
             </div>

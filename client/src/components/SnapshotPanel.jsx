@@ -71,7 +71,7 @@ export default function SnapshotPanel({ snapshots, onTakeSnapshot, taking, error
                 {REASON_LABEL[snap.reason] || snap.reason}
               </Badge>
               <span className="text-slate-700 text-[0.9rem]">{new Date(snap.createdAt).toLocaleString()}</span>
-              <span className="ml-auto text-slate-500 text-[0.85rem]">Risk {snap.riskScore ?? '—'}</span>
+              <span className="ml-auto text-slate-500 text-[0.85rem]">Risk {snap.riskScore ?? '—'} · Health {snap.healthScore ?? '—'}</span>
             </label>
           ))}
         </div>

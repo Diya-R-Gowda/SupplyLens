@@ -2,6 +2,7 @@ import Card from './Card';
 import Badge from './Badge';
 import Button from './Button';
 import { RiskBadge } from './RiskBadge';
+import { HealthBadge } from './HealthBadge';
 
 const unverifiedBadgeClass = 'px-2.5 py-1 bg-amber-100 text-amber-800 text-[0.78rem] uppercase tracking-[0.08em]';
 const factorBadgeClass = 'px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]';
@@ -39,7 +40,7 @@ export default function DigitalTwinPanel({
 }) {
   if (!twin) return null;
 
-  const { risk, enrichment, esg, logistics, documents, news, contract } = twin;
+  const { risk, health, enrichment, esg, logistics, documents, news, contract } = twin;
 
   return (
     <div className="grid gap-3.5">
@@ -61,6 +62,28 @@ export default function DigitalTwinPanel({
           </p>
         ) : null}
       </Card>
+
+      {health ? (
+        <Card className="grid gap-3 p-4 rounded-2xl bg-white/72">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="m-0 font-semibold text-slate-800">Health score</p>
+            <HealthBadge score={health.score} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={factorBadgeClass}>ESG {health.currentFactors.esgScore}</Badge>
+            <Badge className={factorBadgeClass}>Logistics {health.currentFactors.logisticsScore}</Badge>
+            <Badge className={factorBadgeClass}>Documents {health.currentFactors.docCompletenessScore}</Badge>
+            <Badge className={factorBadgeClass}>Contract {health.currentFactors.contractHealthScore}</Badge>
+            <Badge className={factorBadgeClass}>Risk-inverse {health.currentFactors.riskComponent}</Badge>
+          </div>
+          {health.lastChange ? (
+            <p className="m-0 text-[0.85rem] text-slate-500">
+              {health.lastChange.delta > 0 ? '+' : ''}{health.lastChange.delta} from {health.lastChange.previousScore} on{' '}
+              {new Date(health.lastChange.timestamp).toLocaleDateString()} ({health.lastChange.reason?.replace(/_/g, ' ')})
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card className="grid gap-2 p-4 rounded-2xl bg-white/72">
         <p className="m-0 font-semibold text-slate-800">Contract status</p>
