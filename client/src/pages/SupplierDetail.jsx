@@ -9,6 +9,7 @@ import Modal from '../components/Modal';
 import Card from '../components/Card';
 import Badge from '../components/Badge';
 import Timeline from '../components/Timeline';
+import DigitalTwinPanel from '../components/DigitalTwinPanel';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -45,6 +46,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [uploadStatus, setUploadStatus] = useState('');
   const [documents, setDocuments] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [twin, setTwin] = useState(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -58,6 +60,11 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState('');
 
+  const [esgRefreshing, setEsgRefreshing] = useState(false);
+  const [esgError, setEsgError] = useState('');
+  const [logisticsRefreshing, setLogisticsRefreshing] = useState(false);
+  const [logisticsError, setLogisticsError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
 
@@ -65,11 +72,16 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     api.get(`/suppliers/${supplierId}/timeline`).then((res) => setTimeline(res.data.data || [])).catch(() => setTimeline([]));
   };
 
+  const loadTwin = () => {
+    api.get(`/suppliers/${supplierId}/twin`).then((res) => setTwin(res.data.data || null)).catch(() => setTwin(null));
+  };
+
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
     api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data.data || [])).catch(() => setDocuments([]));
     loadTimeline();
+    loadTwin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
@@ -108,6 +120,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setSupplier(response.data.data);
       setIsEditing(false);
       loadTimeline();
+      loadTwin();
       onChanged?.();
     } catch (requestError) {
       const details = requestError?.response?.data?.error?.details;
@@ -125,10 +138,39 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       const response = await api.post(`/suppliers/${supplierId}/enrich`);
       setSupplier((prev) => ({ ...prev, enrichment: response.data.data }));
       loadTimeline();
+      loadTwin();
     } catch (requestError) {
       setEnrichError(requestError?.response?.data?.error?.message || 'Unable to enrich supplier data.');
     } finally {
       setEnriching(false);
+    }
+  };
+
+  const handleEsgRefresh = async () => {
+    setEsgRefreshing(true);
+    setEsgError('');
+    try {
+      await api.post(`/suppliers/${supplierId}/esg-refresh`);
+      loadTimeline();
+      loadTwin();
+    } catch (requestError) {
+      setEsgError(requestError?.response?.data?.error?.message || 'Unable to refresh ESG data.');
+    } finally {
+      setEsgRefreshing(false);
+    }
+  };
+
+  const handleLogisticsRefresh = async () => {
+    setLogisticsRefreshing(true);
+    setLogisticsError('');
+    try {
+      await api.post(`/suppliers/${supplierId}/logistics-refresh`);
+      loadTimeline();
+      loadTwin();
+    } catch (requestError) {
+      setLogisticsError(requestError?.response?.data?.error?.message || 'Unable to refresh logistics data.');
+    } finally {
+      setLogisticsRefreshing(false);
     }
   };
 
@@ -274,6 +316,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 const latestDocuments = await api.get(`/documents/${supplierId}`);
                 setDocuments(latestDocuments.data.data || []);
                 loadTimeline();
+                loadTwin();
               } catch (uploadError) {
                 setUploadStatus(uploadError?.response?.data?.error?.message || 'Failed to process document.');
               }
@@ -330,6 +373,22 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
           <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Latest Intelligence</h2>
           <NewsPanel supplierId={supplierId} />
+        </section>
+
+        <section className="rounded-[20px] p-5 bg-indigo-50/60 border border-indigo-300/40">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Digital Twin</h2>
+          <p className="mt-0 mb-3.5 text-slate-500 text-[0.85rem]">
+            A consolidated, always-current profile combining everything below - risk, ESG, logistics, documents, and news.
+          </p>
+          <DigitalTwinPanel
+            twin={twin}
+            onEsgRefresh={handleEsgRefresh}
+            esgRefreshing={esgRefreshing}
+            esgError={esgError}
+            onLogisticsRefresh={handleLogisticsRefresh}
+            logisticsRefreshing={logisticsRefreshing}
+            logisticsError={logisticsError}
+          />
         </section>
 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
