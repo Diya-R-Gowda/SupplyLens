@@ -164,15 +164,29 @@ Full pass/fail verification of all of the above is in [Phase 3 Complete — End-
 
 ---
 
-# Remaining Work — Phase 4 (Supplier Digital Twin)
+# Remaining Work — Phase 4 (Supplier Digital Twin) — ✅ COMPLETE (2026-08-05)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Digital Twin Engine | Combine internal and external supplier information into a continuously evolving supplier profile. |
-| 🔴 | Unified Supplier Model | Merge contracts, documents, news, ESG, logistics, and operational data. |
-| 🔴 | Supplier Health Score | Continuously calculate supplier health based on multiple data sources. |
-| 🔴 | Historical Snapshots | Track supplier state over time for comparison and auditing. |
-| 🔴 | Twin Synchronization | Keep Digital Twin updated whenever new supplier information is received. |
+| 🟢 | Unified Supplier Model | ESG and logistics sub-documents added to `Supplier` (same self-contained, re-runnable shape as Phase 3's `enrichment`), Gemini-prompted like enrichment. Timeline's `Promise.all` data-gathering extracted into a shared `supplierAggregationService.js` helper, reused by both timeline and the new twin endpoint. |
+| 🟢 | Digital Twin Engine | `GET /suppliers/:id/twin` - current-state synthesis (live risk/health factors, enrichment/ESG/logistics, document count, news sentiment rollup, contract status), compute-on-read like timeline, not persisted. |
+| 🟢 | Supplier Health Score | Distinct metric from Risk Score (audit's explicit warning: must not be Risk Score renamed) - own weighted formula incorporating ESG/logistics/document-completeness/contract-health plus a minority-weighted inverted risk component. Shares Risk Score's cap/rate-limit mechanics via an extracted `scoringEngine.js`, not its formula. |
+| 🟢 | Historical Snapshots | `SupplierSnapshot` model persists the full twin-shaped state at a point in time. Scheduled daily + on-demand manual + automatic on a significant (capped) score swing. Fixed 100-per-supplier retention cap. Basic side-by-side comparison UI. |
+| 🟢 | Twin Synchronization | Closed a real pre-existing gap the audit found: document upload/delete and manual supplier edits never triggered any score recompute at all. Now wired via a shared `twinSyncService.js`, along with extending every existing risk-only trigger to also refresh Health Score. |
+
+See [Phase 4 Complete — End-to-End Smoke Test](#-phase-4-complete--end-to-end-smoke-test-2026-08-05) below for the full verification results.
+
+## Phase 4 — Technical Summary
+
+**Starting point: a completed read-only audit** (not a build-blind start) that confirmed live: the timeline endpoint's aggregation pattern was the closest existing analog to a "unified view" but shaped wrong for a twin (event list vs. current state); ESG/logistics data was completely absent from the schema; `riskScoreService.js`'s mechanics (factors → weighted score → capped/rate-limited update → audit history) were reusable for Health Score but its formula/output were not; no broader snapshot mechanism existed beyond `RiskHistory`'s narrow risk-only factors; and `computeRiskScore()` was only called from 3 places, with document upload/delete and manual supplier edits confirmed via grep to never trigger any recompute at all.
+
+- **Unified Supplier Model** - ESG (`environmentalScore`/`socialScore`/`governanceScore`/summary) and logistics (`onTimeDeliveryRate`/`averageLeadTimeDays`/notes) added as `Supplier` sub-documents, Gemini-prompted via new `enrichEsgData`/`enrichLogisticsData` functions in `enrichmentService.js`. Found and fixed a real bug during testing: `Number(null)` evaluates to `0` in JS, so the initial coercion logic silently turned Gemini's correct "I don't know" `null` responses into a misleading literal `0` (read as "0% on-time delivery" instead of "unknown") - both functions now explicitly check for `null`/`undefined` before coercing.
+- **Digital Twin** - `buildSupplierTwin()` synthesizes current risk/health scores with *live* factor breakdowns (exported `computeFactors`/`computeHealthFactors` so the twin always reflects current data, not just the factors recorded at the time of the last actual score change), enrichment/ESG/logistics, document count + most recent upload, a news sentiment rollup, and contract status. Compute-on-read, matching timeline's own precedent.
+- **Health Score** - a genuinely distinct metric from Risk Score, per the audit's explicit warning. 25% ESG composite / 20% logistics / 15% document completeness / 15% contract health / 25% inverted risk score (deliberately capped at a minority weight so ESG+logistics, 45% combined, are the metric's real differentiator). Verified live: two suppliers with identical risk score (0, never computed) scored 65 vs. 44 based entirely on ESG/logistics/contract differences - real proof it isn't Risk Score under a new name.
+- **Historical Snapshots** - `SupplierSnapshot` reuses the twin's exact output shape, so "what a snapshot looks like" and "what the live twin looks like" never drift apart. Scheduled daily (coarser than news's 6-hourly cadence - snapshots are for historical comparison, not freshness), on-demand via a manual endpoint, and automatically when either score moves by a significant (capped, ≥15-point) amount. Fixed 100-per-supplier retention cap, verified with a temporarily-lowered test cap.
+- **Twin Synchronization** - closed the audit's confirmed gap: document upload/delete and manual supplier edits (`PUT`/`PATCH`) now trigger a shared `syncScoresAfterChange()` that recomputes risk then health (health's inverted-risk factor depends on risk's *current*, post-recompute value, so ordering matters). ESG/logistics refreshes call `computeHealthScore` directly instead, since neither factors into the risk formula at all. One real product judgment call: a manual edit that explicitly sets `riskScore` skips the risk auto-recompute (treated as an intentional override) but still recomputes Health Score, which has no equivalent override field.
+
+Full pass/fail verification of all of the above is in [Phase 4 Complete — End-to-End Smoke Test](#-phase-4-complete--end-to-end-smoke-test-2026-08-05); open items (weight-table tuning, retention/cadence defaults, known limitations) are tracked in `TODO.md`.
 
 ---
 
@@ -385,7 +399,7 @@ Every item from the Phase 3 plan above (news aggregation, sentiment, enrichment,
 | 2 | Dedup on repeated fetch | 🟢 PASS | Re-running refresh on the same supplier fetched 5 articles from NewsAPI but stored 0 new ones |
 | 3 | Risk score formula + cap + rate limit | 🟢 PASS | Verified the raw formula matches exactly (e.g. a raw target of 84 from a starting score of 0 was correctly capped to 15), and an immediate second update with the same reason was correctly skipped as rate-limited |
 | 4 | Timeline merges all 5 event types | 🟢 PASS | A real supplier accumulating a document upload, news articles, a manual edit, and a risk change all appeared correctly, sorted most recent first |
-| 5 | Company enrichment | 🟡 Code-verified, not data-verified | The endpoint, JSON parsing, and error handling all work correctly (confirmed live: a real Gemini 429 correctly surfaced as a real error, not a fake success) - but the Gemini daily quota was exhausted before a successful enrichment response could be captured this session. Needs a follow-up check with fresh quota; tracked in `TODO.md` |
+| 5 | Company enrichment | 🟢 PASS | Re-verified live after the Gemini model/quota fix (see below): 3 real companies (Tesla, Siemens, Toyota) returned plausible, mostly-accurate data via both direct service calls and the real UI |
 | 6 | Cross-org access blocked on every new/touched endpoint | 🟢 PASS | `news.js` (GET + refresh), `suppliers.js` (enrich + timeline) all correctly 404 for a second org, re-verified in the final pass |
 | 7 | Zero unexpected console errors (Playwright) | 🟢 PASS | The only console line seen was the browser's own default logging of a real, intentionally-triggered 500 (Gemini quota) during the enrichment UI test - not an application bug, same category noted in the Phase 1/2 smoke tests |
 
@@ -401,12 +415,47 @@ Non-obvious calls made during Phase 3:
 - **Gemini over a paid company-data API for enrichment**, and **the NewsAPI key already in `.env` used directly rather than building the keyless GDELT/RSS fallback** - both chosen because the primary path (a real, working key/no-new-signup) was available, per the spec's own guidance to default to the no-key-required or already-available path rather than block progress. Both are revisable; see `TODO.md`.
 - **`TODO.md` introduced this phase** as the single place for anything genuinely blocked on a human decision (API keys, product tradeoffs, infrastructure/billing, known limitations) - kept separate from this file's historical backlog sections so open items don't get lost in a growing document.
 
-## Backlog — carried into Phase 4
+## Backlog — carried into Phase 5
 
 See `TODO.md` at the repo root for the full, current list of open items (it supersedes this section going forward - kept here only for the org-scoping/create-supplier-UI items that predate `TODO.md`'s introduction):
 
-- **Org-scoping is still enforced per-route, not structurally.** Recommendation unchanged from Phase 2: a shared middleware that resolves the supplier via an org-scoped lookup and attaches it as `req.supplier`, or at minimum a lint rule / review checklist item.
+- **Org-scoping is still enforced per-route, not structurally.** Recommendation unchanged since Phase 2: a shared middleware that resolves the supplier via an org-scoped lookup and attaches it as `req.supplier`, or at minimum a lint rule / review checklist item. Every new Phase 4 route (`twin`, `esg-refresh`, `logistics-refresh`, `snapshot`/`snapshots`) was individually checked and live cross-org-tested rather than relying on the pattern being structural - none repeated the mistake, but the structural fix itself still hasn't been built.
+- ~~Document upload/delete and manual supplier edits never triggered a risk-score recompute~~ - **fixed in Phase 4**: both now trigger a shared risk+health recompute via `twinSyncService.js`.
 - **No "create supplier" UI.**
+
+---
+
+# ✅ Phase 4 Complete — End-to-End Smoke Test (2026-08-05)
+
+Every item from the Phase 4 plan above (Unified Supplier Model, Digital Twin Engine, Health Score, Historical Snapshots, Twin Synchronization) has been implemented, hardened, and verified against real Atlas data and real Gemini calls - not just code review. Built directly on a completed read-only audit rather than re-discovering its findings.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | ESG/logistics refresh, real differentiated data | 🟢 PASS | Patagonia scored 95/88/90 (E/S/G), ExxonMobil scored 35/50/60 - real, plausible differentiation, not hallucinated noise |
+| 2 | Null-vs-zero bug found and fixed | 🟢 PASS | `Number(null)` evaluating to `0` was silently turning Gemini's honest "unknown" logistics responses into a misleading literal `0` - fixed before this ever reached the UI |
+| 3 | Digital Twin fully synthesizes all sources | 🟢 PASS | A real Tesla supplier with accumulated documents/news/enrichment/ESG/logistics/risk/health all correctly appeared in one `GET .../twin` response, internally consistent (e.g. risk's `expiryScore` matched `contract.status`) |
+| 4 | Health Score meaningfully differentiated from Risk Score | 🟢 PASS | Two suppliers with identical (never-computed, 0) risk scores produced health scores of 65 and 44 based purely on ESG/logistics/contract differences - proof it isn't Risk Score renamed |
+| 5 | Document upload/manual edit immediately updates both scores | 🟢 PASS | Uploading a document moved riskScore 0→15 and healthScore 50→59 in one request, no separate refresh step; a follow-up `contractExpiry` edit moved both again, with exact arithmetic matching the documented formulas both times |
+| 6 | Pre-existing sync gap confirmed fixed with real before/after evidence | 🟢 PASS | Same test as #5 - before Phase 4, this upload/edit would have left both scores unchanged indefinitely; both moved immediately with no cron/manual-refresh step in between |
+| 7 | Snapshot capture + comparison reflects real point-in-time state | 🟢 PASS | Two manual snapshots taken with a `contractExpiry` edit in between correctly captured differing states (risk 26→41, health 58→49); a third snapshot was auto-triggered by a significant (capped) swing, unprompted |
+| 8 | Retention policy | 🟢 PASS | Verified with a temporarily-lowered test cap (3 instead of 100): after 7 total snapshot takes, exactly the 3 most recent remained |
+| 9 | Cross-org access blocked on every new endpoint | 🟢 PASS | `twin`, `esg-refresh`, `logistics-refresh`, `snapshot` (POST), `snapshots` (list), `snapshots/:id` (single) all correctly 404 for a second org, tested together in one sweep |
+| 10 | Zero console errors across all new UI (Playwright) | 🟢 PASS | Full flow - register, populate real data, view twin, edit, take snapshot - produced zero console errors across 5 separate live UI runs during development plus one final comprehensive pass |
+
+All test data (suppliers, users, orgs, documents, news, risk/health history, snapshots) created during testing was cleaned from Atlas after every pass.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 4, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Health Score's formula is deliberately structured so ESG+logistics (45% combined) outweigh the inverted risk-score component (25%)** - the audit's single clearest warning was not to let this become Risk Score renamed. Verified live with two suppliers sharing an identical (0, never-computed) risk score but scoring 65 vs. 44 on health, driven entirely by the new signals. (`server/services/healthScoreService.js`)
+- **A manual edit that explicitly sets `riskScore` skips the new auto-recompute trigger, but Health Score still recomputes.** Without this carve-out, the newly-added sync trigger would immediately overwrite an admin's deliberate manual risk-score entry with the computed value - which would make manually setting it pointless. Health has no equivalent override field, so no carve-out is needed there. A real, non-obvious product judgment call - flagged in `TODO.md` as revisable. (`server/routes/suppliers.js`)
+- **Health's inverted-risk factor is computed *after* risk's own recompute within the same trigger, not before.** `twinSyncService.syncScoresAfterChange()` calls `computeRiskScore` then `computeHealthScore` in that order deliberately - health's `riskComponent = 100 - riskScore` would otherwise use a stale risk value the moment risk actually changes. Verified live: after a document upload moved risk 0→15, health's `riskComponent` factor read `85` (using the *new* risk score), not `100`. (`server/services/twinSyncService.js`)
+- **Digital Twin stays compute-on-read, not persisted** - explicitly recommended by the audit and consistent with the timeline endpoint's existing precedent. No sync burden, always fresh by construction. Revisit only if this becomes a real performance concern at scale (unbenchmarked - see `TODO.md`).
+- **An on-demand snapshot is automatically taken when either score moves by a significant (≥15-point, i.e. capped) amount**, on top of the existing scheduled+manual triggers - deliberately not on every minor mutation, which would defeat the retention cap's whole purpose. Verified live: a capped risk swing correctly triggered a `reason: significant_change` snapshot with no explicit request to do so.
+- **Found and fixed a real bug during ESG/logistics testing, not just at the end:** `Number(null)` evaluates to `0` in JavaScript, not `NaN` - the initial coercion silently converted Gemini's correct "I don't know" `null` responses into a misleading literal `0` for on-time-delivery-rate (reading as "0%" instead of "unknown"). Caught by inspecting the raw Gemini response directly rather than trusting the parsed output, fixed before it ever reached the UI.
 
 ---
 
