@@ -13,7 +13,9 @@ const { gatherSupplierData } = require('../services/supplierAggregationService')
 const { buildSupplierTwin } = require('../services/twinService');
 const { takeSnapshot } = require('../services/snapshotService');
 const SupplierSnapshot = require('../models/SupplierSnapshot');
+const { syncScoresAfterChange } = require('../services/twinSyncService');
 const { computeRiskScore } = require('../services/riskScoreService');
+const { computeHealthScore } = require('../services/healthScoreService');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
 const mongoose = require('mongoose');
@@ -400,6 +402,21 @@ const updateHandler = asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId);
   applySupplierUpdate(supplier, updates);
   const updated = await supplier.save();
+
+  // Closes a real pre-existing gap: manual edits (e.g. changing
+  // contractExpiry, which is 30% of the risk formula and 15% of health's)
+  // never triggered any recompute before, so both scores could silently go
+  // stale until the next scheduled news cron incidentally touched this
+  // supplier. Skip the risk recompute specifically when the caller just
+  // explicitly set riskScore in this same request - that's a deliberate
+  // manual override, and immediately recomputing it away would defeat the
+  // point of letting an admin set it directly. Health has no equivalent
+  // direct-override field, so it always recomputes here.
+  if (req.body.riskScore === undefined) {
+    await computeRiskScore(updated, 'manual_edit');
+  }
+  await computeHealthScore(updated, 'manual_edit');
+
   return sendSuccess(res, updated);
 });
 
@@ -823,13 +840,14 @@ router.post('/:id/enrich', auth, asyncHandler(async (req, res) => {
   supplier.enrichment = enrichment;
   await supplier.save();
 
-  // Enrichment doesn't feed the risk formula itself yet - there's no clear,
+  // Enrichment doesn't feed either formula directly - there's no clear,
   // non-speculative signal for how industry/company-size/founding-year
-  // should move a risk score without more product input (see TODO.md). This
-  // recompute is just for freshness (e.g. picking up news/document changes
-  // that happened since the last risk update), same reason bucket as any
-  // other trigger so it's independently rate-limited from news-driven ones.
-  await computeRiskScore(supplier, 'enrichment_update');
+  // should move risk or health without more product input (see TODO.md).
+  // This recompute is just a freshness opportunity (e.g. picking up
+  // news/document changes since the last update), same reason bucket as
+  // any other trigger so it's independently rate-limited from news-driven
+  // ones.
+  await syncScoresAfterChange(supplier, 'enrichment_update');
 
   return sendSuccess(res, enrichment);
 }));
@@ -891,9 +909,10 @@ router.post('/:id/esg-refresh', auth, asyncHandler(async (req, res) => {
   supplier.esg = esg;
   await supplier.save();
 
-  // Health Score recompute is wired in here once healthScoreService exists
-  // (Phase 4 Step 5) - ESG has no input into the risk-score formula, so
-  // deliberately no computeRiskScore call in the meantime.
+  // Health Score only, deliberately no risk recompute - ESG has no input
+  // into the risk formula at all, but it's a direct Health Score factor
+  // (esgScore, 25% weight).
+  await computeHealthScore(supplier, 'esg_update');
 
   return sendSuccess(res, esg);
 }));
@@ -955,7 +974,9 @@ router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
   supplier.logistics = logistics;
   await supplier.save();
 
-  // Health Score recompute wired in at Phase 4 Step 5 (see esg-refresh above).
+  // Same reasoning as esg-refresh above - logistics feeds Health Score's
+  // logisticsScore factor directly, but has no risk-formula input.
+  await computeHealthScore(supplier, 'logistics_update');
 
   return sendSuccess(res, logistics);
 }));
