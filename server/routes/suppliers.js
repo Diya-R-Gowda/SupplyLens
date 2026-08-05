@@ -8,7 +8,8 @@ const Supplier = require('../models/Supplier');
 const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
-const { enrichSupplierData } = require('../services/enrichmentService');
+const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
+const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { computeRiskScore } = require('../services/riskScoreService');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
@@ -832,6 +833,132 @@ router.post('/:id/enrich', auth, asyncHandler(async (req, res) => {
 
 /**
  * @swagger
+ * /suppliers/{id}/esg-refresh:
+ *   post:
+ *     summary: Populate AI-generated ESG estimate for a supplier
+ *     description: >
+ *       Prompts Gemini for an environmental/social/governance estimate (0-100 scores plus a summary).
+ *       **This is AI-generated, not a verified data source** - there's no ground truth to check it
+ *       against, so the UI must present it as unverified. Re-runnable: overwrites the previous
+ *       value and updates `refreshedAt`. Not available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: ESG estimate populated and saved on the supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 environmentalScore: 62
+ *                 socialScore: 58
+ *                 governanceScore: 70
+ *                 summary: Has published sustainability targets but faced some supply-chain labor scrutiny.
+ *                 source: gemini
+ *                 refreshedAt: '2026-08-02T12:00:00.000Z'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/esg-refresh', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('ESG refresh is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const esg = await enrichEsgData(supplier.name);
+  supplier.esg = esg;
+  await supplier.save();
+
+  // Health Score recompute is wired in here once healthScoreService exists
+  // (Phase 4 Step 5) - ESG has no input into the risk-score formula, so
+  // deliberately no computeRiskScore call in the meantime.
+
+  return sendSuccess(res, esg);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/logistics-refresh:
+ *   post:
+ *     summary: Populate AI-generated logistics/operational estimate for a supplier
+ *     description: >
+ *       Prompts Gemini for an on-time-delivery-rate/lead-time estimate. **This is AI-generated, not
+ *       a verified data source**, and this specific data (unlike enrichment/ESG) is rarely public at
+ *       all for most companies - expect `null` fields far more often than the enrich/esg-refresh
+ *       endpoints. Re-runnable: overwrites the previous value and updates `refreshedAt`. Not
+ *       available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Logistics estimate populated and saved on the supplier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 onTimeDeliveryRate: null
+ *                 averageLeadTimeDays: null
+ *                 logisticsNotes: Operates a large multinational manufacturing and distribution network.
+ *                 source: gemini
+ *                 refreshedAt: '2026-08-02T12:00:00.000Z'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Logistics refresh is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const logistics = await enrichLogisticsData(supplier.name);
+  supplier.logistics = logistics;
+  await supplier.save();
+
+  // Health Score recompute wired in at Phase 4 Step 5 (see esg-refresh above).
+
+  return sendSuccess(res, logistics);
+}));
+
+/**
+ * @swagger
  * /suppliers/{id}/timeline:
  *   get:
  *     summary: Chronological feed of events for a supplier
@@ -890,11 +1017,7 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
 
-  const [documents, news, riskChanges] = await Promise.all([
-    Document.find({ supplierId: supplier._id }).lean(),
-    NewsCache.find({ supplierId: supplier._id, orgId: req.user.orgId }).lean(),
-    RiskHistory.find({ supplierId: supplier._id, orgId: req.user.orgId }).lean(),
-  ]);
+  const { documents, news, riskChanges } = await gatherSupplierData(supplier);
 
   const events = [
     { type: 'supplier_created', timestamp: supplier.createdAt },
