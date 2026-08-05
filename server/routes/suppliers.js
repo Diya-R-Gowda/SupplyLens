@@ -10,6 +10,7 @@ const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
+const { buildSupplierTwin } = require('../services/twinService');
 const { computeRiskScore } = require('../services/riskScoreService');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
@@ -955,6 +956,54 @@ router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
   // Health Score recompute wired in at Phase 4 Step 5 (see esg-refresh above).
 
   return sendSuccess(res, logistics);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/twin:
+ *   get:
+ *     summary: Digital Twin - current-state synthesis of everything known about a supplier
+ *     description: >
+ *       Combines internal and external supplier data into a single "what is true about this
+ *       supplier right now" profile - current risk score plus its live contributing factors,
+ *       current enrichment/ESG/logistics data (each null if never refreshed), document count and
+ *       most recent upload, a news sentiment rollup and most recent headline, and contract status.
+ *       Computed on every read from current data (not persisted) - the same precedent as the
+ *       timeline endpoint, so it's always fresh by construction. See
+ *       `GET /suppliers/{id}/timeline` for the equivalent chronological history view, and
+ *       `GET /suppliers/{id}/snapshots` for point-in-time copies of this same shape. Not
+ *       available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Current-state synthesis
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/twin', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, null);
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const twin = await buildSupplierTwin(supplier);
+
+  return sendSuccess(res, twin);
 }));
 
 /**

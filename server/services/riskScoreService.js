@@ -21,6 +21,11 @@ const RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
 //   - 30% contract expiry: <=30 days -> 100, <=90 days -> 50, unknown -> 75 (treated as risky), else 0
 //   - 20% missing documents: 0 docs -> 100, 1-2 -> 50, 3+ -> 0
 //   - 10% country risk: static lookup table (server/data/countryRisk.json), default 50 if not listed
+// Exported (not just used internally by computeRiskScore) so the Digital
+// Twin endpoint can show the *current* factor breakdown on every read,
+// independent of whether an actual score update has fired recently - the
+// last RiskHistory row reflects the factors at the time of the last
+// *change*, which can be stale if nothing has moved the score in a while.
 const computeFactors = async (supplier) => {
   const news = await NewsCache.find({ supplierId: supplier._id });
   const negativeArticles = news.filter((n) => n.sentiment === 'negative').length;
@@ -42,6 +47,8 @@ const computeFactors = async (supplier) => {
 
   return { newsScore, expiryScore, docScore, countryScore };
 };
+
+exports.computeFactors = computeFactors;
 
 // Recomputes a supplier's risk score and, if it actually changes, persists
 // both the new score and a RiskHistory record explaining why. `reason` is
