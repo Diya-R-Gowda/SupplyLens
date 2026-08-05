@@ -2,6 +2,7 @@ const NewsCache = require('../models/NewsCache');
 const Document = require('../models/Document');
 const RiskHistory = require('../models/RiskHistory');
 const countryRiskMap = require('../data/countryRisk.json');
+const { isRateLimited, applyCappedDelta } = require('./scoringEngine');
 
 // Caps how much a single call can move the score, so a burst of negative
 // news (or a batch cron run touching many articles at once) can't produce a
@@ -55,12 +56,7 @@ exports.computeFactors = computeFactors;
 // the trigger type (e.g. 'scheduled_news_update', 'manual_news_refresh',
 // 'enrichment_update') and doubles as the rate-limit bucket.
 exports.computeRiskScore = async (supplier, reason = 'unspecified') => {
-  const recentSameReasonUpdate = await RiskHistory.findOne({
-    supplierId: supplier._id,
-    reason,
-    createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_MS) },
-  });
-  if (recentSameReasonUpdate) {
+  if (await isRateLimited(RiskHistory, 'supplierId', supplier._id, reason, RATE_LIMIT_MS)) {
     return { updated: false, skippedReason: 'rate_limited' };
   }
 
@@ -70,11 +66,7 @@ exports.computeRiskScore = async (supplier, reason = 'unspecified') => {
   );
 
   const previousScore = supplier.riskScore;
-  let delta = rawScore - previousScore;
-  if (Math.abs(delta) > MAX_SCORE_DELTA) {
-    delta = Math.sign(delta) * MAX_SCORE_DELTA;
-  }
-  const newScore = Math.max(0, Math.min(100, previousScore + delta));
+  const { newScore } = applyCappedDelta(previousScore, rawScore, MAX_SCORE_DELTA);
 
   if (newScore === previousScore) {
     return { updated: false, skippedReason: 'no_change' };
