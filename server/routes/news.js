@@ -6,7 +6,7 @@ const NewsCache = require('../models/NewsCache');
 const Supplier = require('../models/Supplier');
 const { listDemoNews } = require('../services/demoStore');
 const { fetchAndSentimentTagNews } = require('../services/newsService');
-const { computeRiskScore } = require('../services/riskScoreService');
+const { syncScoresAfterChange } = require('../services/twinSyncService');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
@@ -145,7 +145,7 @@ router.post('/:supplierId/refresh', auth, asyncHandler(async (req, res) => {
 	}
 
 	const result = await fetchAndSentimentTagNews(supplier);
-	await computeRiskScore(supplier, 'manual_news_refresh');
+	await syncScoresAfterChange(supplier, 'manual_news_refresh');
 
 	return sendSuccess(res, result);
 }));

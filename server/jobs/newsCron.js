@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const Supplier = require('../models/Supplier');
 const { fetchAndSentimentTagNews } = require('../services/newsService');
-const { computeRiskScore } = require('../services/riskScoreService');
+const { syncScoresAfterChange } = require('../services/twinSyncService');
 
 // Every 6 hours - frequent enough that news stays reasonably fresh, without
 // hammering NewsAPI's free-tier daily request quota (100/day) across every
@@ -20,7 +20,7 @@ const runNewsAndRiskUpdate = async () => {
 
   for (const supplier of suppliers) {
     await fetchAndSentimentTagNews(supplier);
-    await computeRiskScore(supplier, 'scheduled_news_update');
+    await syncScoresAfterChange(supplier, 'scheduled_news_update');
   }
   console.log(`newsCron: update complete for ${suppliers.length} supplier(s).`);
 };
