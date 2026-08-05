@@ -10,6 +10,7 @@ import Card from '../components/Card';
 import Badge from '../components/Badge';
 import Timeline from '../components/Timeline';
 import DigitalTwinPanel from '../components/DigitalTwinPanel';
+import SnapshotPanel from '../components/SnapshotPanel';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -65,6 +66,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [logisticsRefreshing, setLogisticsRefreshing] = useState(false);
   const [logisticsError, setLogisticsError] = useState('');
 
+  const [snapshots, setSnapshots] = useState([]);
+  const [takingSnapshot, setTakingSnapshot] = useState(false);
+  const [snapshotError, setSnapshotError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
 
@@ -76,12 +81,17 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     api.get(`/suppliers/${supplierId}/twin`).then((res) => setTwin(res.data.data || null)).catch(() => setTwin(null));
   };
 
+  const loadSnapshots = () => {
+    api.get(`/suppliers/${supplierId}/snapshots`).then((res) => setSnapshots(res.data.data || [])).catch(() => setSnapshots([]));
+  };
+
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
     api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data.data || [])).catch(() => setDocuments([]));
     loadTimeline();
     loadTwin();
+    loadSnapshots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
@@ -172,6 +182,24 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     } finally {
       setLogisticsRefreshing(false);
     }
+  };
+
+  const handleTakeSnapshot = async () => {
+    setTakingSnapshot(true);
+    setSnapshotError('');
+    try {
+      await api.post(`/suppliers/${supplierId}/snapshot`);
+      loadSnapshots();
+    } catch (requestError) {
+      setSnapshotError(requestError?.response?.data?.error?.message || 'Unable to take snapshot.');
+    } finally {
+      setTakingSnapshot(false);
+    }
+  };
+
+  const handleLoadSnapshot = async (snapshotId) => {
+    const response = await api.get(`/suppliers/${supplierId}/snapshots/${snapshotId}`);
+    return response.data.data;
   };
 
   const handleDelete = async () => {
@@ -388,6 +416,17 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onLogisticsRefresh={handleLogisticsRefresh}
             logisticsRefreshing={logisticsRefreshing}
             logisticsError={logisticsError}
+          />
+        </section>
+
+        <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Snapshots</h2>
+          <SnapshotPanel
+            snapshots={snapshots}
+            onTakeSnapshot={handleTakeSnapshot}
+            taking={takingSnapshot}
+            error={snapshotError}
+            onLoadSnapshot={handleLoadSnapshot}
           />
         </section>
 

@@ -24,6 +24,9 @@ const CONTRACT_STATUS_LABEL = {
 // distinct from the Timeline component (chronological history) and the
 // individual News/Documents/Enrichment sections (which stay as their own
 // detail views). This is a rollup on top of those, not a replacement.
+// readOnly hides the ESG/logistics refresh actions - used when rendering a
+// historical snapshot's state (Phase 4 Step 3), where "refresh" wouldn't
+// make sense (there's nothing to refresh, it's a point-in-time record).
 export default function DigitalTwinPanel({
   twin,
   onEsgRefresh,
@@ -32,6 +35,7 @@ export default function DigitalTwinPanel({
   onLogisticsRefresh,
   logisticsRefreshing,
   logisticsError,
+  readOnly = false,
 }) {
   if (!twin) return null;
 
@@ -90,9 +94,11 @@ export default function DigitalTwinPanel({
       <Card className="grid gap-2 p-4 rounded-2xl bg-white/72">
         <div className="flex items-center justify-between gap-3">
           <p className="m-0 font-semibold text-slate-800">ESG</p>
-          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onEsgRefresh} loading={esgRefreshing} loadingText="Refreshing...">
-            {esg ? 'Refresh' : 'Refresh with AI'}
-          </Button>
+          {readOnly ? null : (
+            <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onEsgRefresh} loading={esgRefreshing} loadingText="Refreshing...">
+              {esg ? 'Refresh' : 'Refresh with AI'}
+            </Button>
+          )}
         </div>
         {esgError ? <p className="m-0 text-red-700 text-[0.85rem]">{esgError}</p> : null}
         {esg ? (
@@ -113,9 +119,11 @@ export default function DigitalTwinPanel({
       <Card className="grid gap-2 p-4 rounded-2xl bg-white/72">
         <div className="flex items-center justify-between gap-3">
           <p className="m-0 font-semibold text-slate-800">Logistics</p>
-          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onLogisticsRefresh} loading={logisticsRefreshing} loadingText="Refreshing...">
-            {logistics ? 'Refresh' : 'Refresh with AI'}
-          </Button>
+          {readOnly ? null : (
+            <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onLogisticsRefresh} loading={logisticsRefreshing} loadingText="Refreshing...">
+              {logistics ? 'Refresh' : 'Refresh with AI'}
+            </Button>
+          )}
         </div>
         {logisticsError ? <p className="m-0 text-red-700 text-[0.85rem]">{logisticsError}</p> : null}
         {logistics ? (
