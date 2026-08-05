@@ -11,6 +11,8 @@ const { openDownloadStream } = require('../services/gridfsService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { buildSupplierTwin } = require('../services/twinService');
+const { takeSnapshot } = require('../services/snapshotService');
+const SupplierSnapshot = require('../models/SupplierSnapshot');
 const { computeRiskScore } = require('../services/riskScoreService');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
@@ -1004,6 +1006,167 @@ router.get('/:id/twin', auth, asyncHandler(async (req, res) => {
   const twin = await buildSupplierTwin(supplier);
 
   return sendSuccess(res, twin);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/snapshot:
+ *   post:
+ *     summary: Take an on-demand point-in-time snapshot of the supplier's current twin state
+ *     description: >
+ *       Persists a copy of the same shape `GET /suppliers/{id}/twin` returns, tagged
+ *       `reason: manual`. Complements the daily scheduled snapshot job. Subject to the same
+ *       retention cap (last 100 snapshots per supplier) as scheduled snapshots - see
+ *       `snapshotService.js`. Not available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Snapshot taken
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/snapshot', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Snapshots are not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const snapshot = await takeSnapshot(supplier, 'manual');
+
+  return sendSuccess(res, snapshot);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/snapshots:
+ *   get:
+ *     summary: List point-in-time snapshots for a supplier (paginated)
+ *     description: >
+ *       Metadata only (id, reason, createdAt, and the risk score at capture time) - fetch
+ *       `GET /suppliers/{id}/snapshots/{snapshotId}` for a snapshot's full twin-shaped state.
+ *       Not available in demo mode (returns an empty list).
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated snapshot metadata, most recent first
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/snapshots', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, [], buildPaginationMeta(0, 1, DEFAULT_PAGE_LIMIT));
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const { page, limit } = parsePagination(req.query.page, req.query.limit);
+
+  const [snapshots, total] = await Promise.all([
+    SupplierSnapshot.find({ supplierId: supplier._id, orgId: req.user.orgId })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select('_id reason createdAt state.risk.score')
+      .lean(),
+    SupplierSnapshot.countDocuments({ supplierId: supplier._id, orgId: req.user.orgId }),
+  ]);
+
+  const summaries = snapshots.map((snap) => ({
+    _id: snap._id,
+    reason: snap.reason,
+    createdAt: snap.createdAt,
+    riskScore: snap.state?.risk?.score ?? null,
+  }));
+
+  return sendSuccess(res, summaries, buildPaginationMeta(total, page, limit));
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/snapshots/{snapshotId}:
+ *   get:
+ *     summary: Fetch a single snapshot's full twin-shaped state
+ *     description: >
+ *       Returns the complete state captured at that point in time - the same shape as
+ *       `GET /suppliers/{id}/twin`. A frontend can fetch two snapshots this way and diff them
+ *       client-side for comparison.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: snapshotId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Full snapshot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       404:
+ *         description: No such supplier or snapshot in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/snapshots/:snapshotId', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Snapshot not found', 404, 'SNAPSHOT_NOT_FOUND');
+  }
+
+  await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  const snapshot = await SupplierSnapshot.findOne({
+    _id: req.params.snapshotId,
+    supplierId: req.params.id,
+    orgId: req.user.orgId,
+  }).lean();
+
+  if (!snapshot) {
+    throw new ApiError('Snapshot not found', 404, 'SNAPSHOT_NOT_FOUND');
+  }
+
+  return sendSuccess(res, snapshot);
 }));
 
 /**
