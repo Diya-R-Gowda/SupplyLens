@@ -5,7 +5,7 @@ product calls with real tradeoffs, infrastructure/billing, and known
 limitations carried forward. Everything else that came up during Phase 3
 was either implemented or fixed outright; this file only holds what's left.
 
-Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 3.5 Flash-Lite).
+Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 3.5 Flash-Lite; enrichment data quality re-verified live).
 
 ## 1. API keys / signups only you can do
 
@@ -38,14 +38,13 @@ Last updated: 2026-08-02 (news/AI provider swap — Currents API + Gemini 3.5 Fl
 
 ## 3. Infrastructure / paid tier (needs your account, billing, or both)
 
-- **Gemini API free-tier quota was hit repeatedly during Phase 3 testing** (~20 `generateContent` requests/day on the `gemini-flash-latest` alias) — shared across RAG answers, sentiment classification, and enrichment. Now pinned to `gemini-2.5-flash-lite` instead, which should raise this to ~1,000/day for free. If that's still not enough for real usage, a paid Gemini plan is the next step. (Embeddings are a separate quota and weren't affected either way.)
+- **Gemini API free-tier quota was hit repeatedly during Phase 3 testing** (~20 `generateContent` requests/day on the `gemini-flash-latest` alias) — shared across RAG answers, sentiment classification, and enrichment. Now pinned to `gemini-3.5-flash-lite` instead, confirmed live to have much more free-tier headroom (a full enrichment re-verification pass — 3 real companies plus a live UI run — completed without hitting any quota error). If real usage ever outgrows this, a paid Gemini plan is the next step. (Embeddings are a separate quota and weren't affected either way.)
 - **NewsAPI's free tier (100/day, non-production ToS) was replaced with Currents API** (~600-1,000/day, commercial use allowed) — see section 1, needs a key. If Currents' limits are ever hit in practice, their paid tiers are the next step.
 - **A real company-data API** (if you want more reliable enrichment than Gemini's best-effort research) would need its own signup and likely a paid tier for useful coverage — see the product-decision note above.
 
 ## 4. Known limitations / deferred work
 
 - **Sentiment classification is Gemini-prompted, not a dedicated sentiment model.** Quality is reasonable on the examples seen live this session (see handoff summary) but hasn't been benchmarked at scale. Structured-JSON parsing failures degrade gracefully (article still stored, sentiment left `null`) rather than crashing, but a genuinely malformed Gemini response is possible in principle.
-- **Enrichment's real output quality wasn't fully re-verified this session** — the Gemini daily quota was exhausted partway through Step 3 testing, so only the error-handling path (a real 429 correctly surfacing as a real error, not a fake success) got live-confirmed for enrichment specifically, on top of the earlier-in-session confirmation that the same JSON-parsing approach works correctly (via sentiment classification, which succeeded before quota ran out). Worth a quick live check with a fresh quota day.
 - **`countryRisk.json` only covers 7 countries** (US/GB/IN/CN/BR/FR/DE); everything else defaults to a neutral 50. Fine as a v1, but a real dataset would improve country-risk accuracy.
 - **`NewsCache` entries expire after 7 days** (a pre-existing TTL index from Phase 1/2, not changed in Phase 3). This means `news_mentioned` timeline events and their sentiment naturally disappear after a week — the timeline isn't a permanent historical record for that event type, only `RiskHistory`/`Document`/supplier-metadata events persist indefinitely.
 - **Enrichment, timeline, and risk-history have no demo-mode data.** All three are real-DB-only (enrichment throws `DEMO_MODE_UNSUPPORTED`; timeline and risk history just return empty), matching the precedent set by document file-retrieval in Phase 2 for features that require real external calls or real accumulated data.
