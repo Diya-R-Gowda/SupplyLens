@@ -1057,7 +1057,7 @@ router.post('/:id/snapshot', auth, asyncHandler(async (req, res) => {
  *   get:
  *     summary: List point-in-time snapshots for a supplier (paginated)
  *     description: >
- *       Metadata only (id, reason, createdAt, and the risk score at capture time) - fetch
+ *       Metadata only (id, reason, createdAt, and the risk/health scores at capture time) - fetch
  *       `GET /suppliers/{id}/snapshots/{snapshotId}` for a snapshot's full twin-shaped state.
  *       Not available in demo mode (returns an empty list).
  *     tags: [Suppliers]
@@ -1100,7 +1100,7 @@ router.get('/:id/snapshots', auth, asyncHandler(async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id reason createdAt state.risk.score')
+      .select('_id reason createdAt state.risk.score state.health.score')
       .lean(),
     SupplierSnapshot.countDocuments({ supplierId: supplier._id, orgId: req.user.orgId }),
   ]);
@@ -1110,6 +1110,7 @@ router.get('/:id/snapshots', auth, asyncHandler(async (req, res) => {
     reason: snap.reason,
     createdAt: snap.createdAt,
     riskScore: snap.state?.risk?.score ?? null,
+    healthScore: snap.state?.health?.score ?? null,
   }));
 
   return sendSuccess(res, summaries, buildPaginationMeta(total, page, limit));
@@ -1229,7 +1230,7 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
 
-  const { documents, news, riskChanges } = await gatherSupplierData(supplier);
+  const { documents, news, riskChanges, healthChanges } = await gatherSupplierData(supplier);
 
   const events = [
     { type: 'supplier_created', timestamp: supplier.createdAt },
@@ -1247,6 +1248,15 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
     })),
     ...riskChanges.map((change) => ({
       type: 'risk_changed',
+      timestamp: change.createdAt,
+      previousScore: change.previousScore,
+      newScore: change.newScore,
+      delta: change.delta,
+      reason: change.reason,
+      factors: change.factors,
+    })),
+    ...healthChanges.map((change) => ({
+      type: 'health_changed',
       timestamp: change.createdAt,
       previousScore: change.previousScore,
       newScore: change.newScore,

@@ -1,5 +1,6 @@
 const { gatherSupplierData } = require('./supplierAggregationService');
 const { computeFactors } = require('./riskScoreService');
+const { computeHealthFactors } = require('./healthScoreService');
 
 // Synthesizes a "what is true about this supplier right now" profile -
 // the Digital Twin - from the same underlying collections the timeline
@@ -8,11 +9,16 @@ const { computeFactors } = require('./riskScoreService');
 // endpoint's existing precedent and avoids a sync burden; SupplierSnapshot
 // (Phase 4 Step 3) is what persists a point-in-time copy of this shape.
 exports.buildSupplierTwin = async (supplier) => {
-  const { documents, news, riskChanges } = await gatherSupplierData(supplier);
+  const { documents, news, riskChanges, healthChanges } = await gatherSupplierData(supplier);
 
   const factors = await computeFactors(supplier);
+  const healthFactors = await computeHealthFactors(supplier);
 
   const lastRiskChange = riskChanges
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+
+  const lastHealthChange = healthChanges
     .slice()
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
 
@@ -57,6 +63,17 @@ exports.buildSupplierTwin = async (supplier) => {
         delta: lastRiskChange.delta,
         reason: lastRiskChange.reason,
         timestamp: lastRiskChange.createdAt,
+      },
+    },
+    health: {
+      score: supplier.healthScore,
+      currentFactors: healthFactors,
+      lastChange: lastHealthChange && {
+        previousScore: lastHealthChange.previousScore,
+        newScore: lastHealthChange.newScore,
+        delta: lastHealthChange.delta,
+        reason: lastHealthChange.reason,
+        timestamp: lastHealthChange.createdAt,
       },
     },
     enrichment: supplier.enrichment?.enrichedAt ? supplier.enrichment : null,

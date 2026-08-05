@@ -1,6 +1,7 @@
 const Document = require('../models/Document');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
+const HealthHistory = require('../models/HealthHistory');
 
 // Shared org-scoped multi-collection gather, extracted from the timeline
 // endpoint so the same query shape isn't duplicated (and left to drift)
@@ -12,11 +13,12 @@ const RiskHistory = require('../models/RiskHistory');
 // findOrgSupplier) - this trusts supplier._id/supplier.orgId, it does not
 // re-check ownership itself.
 exports.gatherSupplierData = async (supplier) => {
-  const [documents, news, riskChanges] = await Promise.all([
+  const [documents, news, riskChanges, healthChanges] = await Promise.all([
     Document.find({ supplierId: supplier._id }).lean(),
     NewsCache.find({ supplierId: supplier._id, orgId: supplier.orgId }).lean(),
     RiskHistory.find({ supplierId: supplier._id, orgId: supplier.orgId }).lean(),
+    HealthHistory.find({ supplierId: supplier._id, orgId: supplier.orgId }).lean(),
   ]);
 
-  return { documents, news, riskChanges };
+  return { documents, news, riskChanges, healthChanges };
 };
