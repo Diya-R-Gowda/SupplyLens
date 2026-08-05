@@ -10,6 +10,7 @@ const Document = require('../models/Document');
 const DocChunk = require('../models/DocChunk');
 const Supplier = require('../models/Supplier');
 const { recordDemoDocument, recordDemoUploadedDocument, listDemoDocuments, removeDemoDocument } = require('../services/demoStore');
+const { syncScoresAfterChange } = require('../services/twinSyncService');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
@@ -111,6 +112,15 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
   // with no Document record ever pointing at it.
   try {
     const result = await processPDF(supplierId, req.file.buffer, req.file.originalname, gridFsFileId);
+
+    // Closes a real pre-existing gap (confirmed via the Phase 4 audit):
+    // document upload/delete never triggered any score recompute at all,
+    // even though document count is a real input to both risk's docScore
+    // and health's docCompletenessScore - so both could silently go stale
+    // after an upload until the next scheduled news cron happened to touch
+    // this supplier via an unrelated trigger.
+    await syncScoresAfterChange(supplier, 'document_upload');
+
     return sendSuccess(res, result, { status: 201 });
   } catch (err) {
     await deleteFile(gridFsFileId);
@@ -264,6 +274,10 @@ router.delete('/:supplierId/:docId', auth, requireRole('admin'), asyncHandler(as
   await DocChunk.deleteMany({ docId: document._id });
   await deleteFile(document.gridFsFileId);
   await document.deleteOne();
+
+  // Same gap-closing trigger as upload above - deleting a document also
+  // changes the document-count input both formulas use.
+  await syncScoresAfterChange(supplier, 'document_delete');
 
   return sendSuccess(res, null, { message: 'Document deleted' });
 }));
