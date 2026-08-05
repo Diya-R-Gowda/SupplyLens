@@ -4,6 +4,14 @@ const supplierSchema = new mongoose.Schema({
   category: { type: String, enum: ['raw_material', 'logistics', 'saas', 'other'] },
   country: { type: String, required: true, trim: true, uppercase: true, match: /^[A-Z]{2}$/ }, // ISO 3166-1 alpha-2
   riskScore: { type: Number, default: 0, min: 0, max: 100 }, // matches the 0-100 scale used by RiskBadge.jsx
+  // Distinct metric from riskScore (Phase 4) - "is this a good, reliable
+  // supplier to work with" rather than "chance of disruption/loss". Own
+  // weighted formula in healthScoreService.js, incorporating ESG/logistics
+  // signals riskScore's formula doesn't use at all. Defaults to 50 (neutral)
+  // rather than 0 - an un-scored supplier isn't known to be unhealthy, just
+  // unassessed yet, unlike riskScore's 0 default which means "no risk signals
+  // seen yet" (a reasonable true default for a brand-new supplier).
+  healthScore: { type: Number, default: 50, min: 0, max: 100 },
   contractExpiry: Date,
   paymentTerms: { type: String, trim: true, maxlength: 100 },
   orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organisation', required: true },
