@@ -8,6 +8,7 @@ const swaggerSpec = require('./config/swagger');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const newsCron = require('./jobs/newsCron');
+const snapshotCron = require('./jobs/snapshotCron');
 const app = express();
 
 app.use(cors());
@@ -31,4 +32,5 @@ const PORT = process.env.PORT || 5000;
 connectDB().finally(() => {
 	app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 	newsCron.start();
+	snapshotCron.start();
 });
