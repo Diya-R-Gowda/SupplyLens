@@ -52,10 +52,16 @@ exports.syncScoresAfterChange = async (supplier, reason) => {
   const healthNewBreach = thresholds.enabled && health.updated
     && isNewBreach(health.previousScore, health.newScore, thresholds.healthThreshold, 'below');
 
-  if (riskWasSignificant || healthWasSignificant) {
-    await takeSnapshot(supplier, 'significant_change');
-  } else if (riskNewBreach || healthNewBreach) {
+  // At most one snapshot per sync call. When a change is both a large swing
+  // and a fresh threshold crossing (common for a supplier's first-ever
+  // score change, since MAX_SCORE_DELTA's cap and a low/first threshold can
+  // coincide), 'threshold_breach' wins - it's the more decision-relevant
+  // label for anyone scanning snapshot history later ("this is when it
+  // became a problem"), vs. the more generic "something big happened".
+  if (riskNewBreach || healthNewBreach) {
     await takeSnapshot(supplier, 'threshold_breach');
+  } else if (riskWasSignificant || healthWasSignificant) {
+    await takeSnapshot(supplier, 'significant_change');
   }
 
   return { risk, health };
