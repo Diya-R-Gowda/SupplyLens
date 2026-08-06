@@ -23,6 +23,7 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/documents', require('./routes/documents'));
 app.use('/api/news', require('./routes/news'));
 app.use('/api/rag', require('./routes/rag'));
+app.use('/api/org', require('./routes/orgConfig'));
 
 app.use(notFound);
 app.use(errorHandler);
