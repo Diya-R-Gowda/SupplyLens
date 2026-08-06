@@ -40,10 +40,12 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
 
       let sentiment = null;
       let sentimentScore = null;
+      let sentimentConfidence = null;
       try {
         const classified = await classifyHeadlineSentiment(supplier.name, article.title);
         sentiment = classified.label;
         sentimentScore = classified.score;
+        sentimentConfidence = classified.confidence;
       } catch (sentimentErr) {
         // Graceful degradation, matching the embedding-failure pattern from
         // Phase 2: a single article's sentiment classification failing must
@@ -63,6 +65,7 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
         source,
         sentiment,
         sentimentScore,
+        sentimentConfidence,
         publishedAt: article.published ? new Date(article.published) : new Date(),
       });
       stored += 1;

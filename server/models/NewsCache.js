@@ -13,6 +13,9 @@ const newsCacheSchema = new mongoose.Schema({
   // against here; null until sentiment classification succeeds.
   sentiment: { type: String, default: null },
   sentimentScore: { type: Number, min: -1, max: 1, default: null },
+  // Gemini's own self-reported 0-1 confidence in the sentiment classification
+  // (Phase 5). Same prompted-JSON pattern as label/score above.
+  sentimentConfidence: { type: Number, min: 0, max: 1, default: null },
   publishedAt: { type: Date, expires: '7d' } // Automatically deletes after 7 days
 });
 

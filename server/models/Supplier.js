@@ -25,6 +25,11 @@ const supplierSchema = new mongoose.Schema({
     companySize: String,
     foundedYear: Number,
     summary: String,
+    // Gemini's own self-reported 0-1 confidence in this data (Phase 5,
+    // prompted-JSON pattern - see enrichmentService.js). No ground truth to
+    // verify a self-reported confidence against, same category as the data
+    // itself (see TODO.md) - a UI signal, not a guarantee.
+    confidence: { type: Number, min: 0, max: 1 },
     source: { type: String, enum: ['gemini'] },
     enrichedAt: Date,
   },
@@ -38,6 +43,7 @@ const supplierSchema = new mongoose.Schema({
     socialScore: { type: Number, min: 0, max: 100 },
     governanceScore: { type: Number, min: 0, max: 100 },
     summary: String,
+    confidence: { type: Number, min: 0, max: 1 },
     source: { type: String, enum: ['gemini'] },
     refreshedAt: Date,
   },
@@ -49,6 +55,7 @@ const supplierSchema = new mongoose.Schema({
     onTimeDeliveryRate: { type: Number, min: 0, max: 100 },
     averageLeadTimeDays: Number,
     logisticsNotes: String,
+    confidence: { type: Number, min: 0, max: 1 },
     source: { type: String, enum: ['gemini'] },
     refreshedAt: Date,
   },

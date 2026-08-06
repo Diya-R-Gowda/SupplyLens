@@ -1,4 +1,14 @@
 const { generateAnswer } = require('./embedService');
+const { clampToRange, toNumberOrNull } = require('../utils/numberCoercion');
+
+// Shared confidence instruction/extraction for all three AI-generated
+// sub-documents below (Phase 5 - Confidence Scores). Reuses sentimentService's
+// proven prompted-JSON pattern rather than a separate confidence-scoring
+// pass or Gemini's raw logprobs (impractical here - see TODO.md for why).
+// 0-1 scale (not low/medium/high) so it composes with the rest of the app's
+// numeric conventions and can be shown as a percentage.
+const CONFIDENCE_FIELD_SPEC = '"confidence": <0-1 number - how confident you are in this specific data, where 1.0 is a well-documented public fact and 0.0 is a pure guess. If every field above is null because you don\'t have reliable information, confidence should be close to 0, not omitted.>';
+const extractConfidence = (parsed) => clampToRange(parsed.confidence, 0, 1);
 
 // AI-generated company enrichment via Gemini - no new API key/signup needed,
 // unlike a real company-data provider (Clearbit/OpenCorporates), so this is
@@ -9,10 +19,10 @@ const { generateAnswer } = require('./embedService');
 exports.enrichSupplierData = async (supplierName) => {
   const prompt = `You are researching the company "${supplierName}" for a supplier-risk assessment tool.
 Respond with ONLY a JSON object, no markdown formatting, no code fences, in exactly this shape:
-{"industry": "<short industry/sector, e.g. 'Automotive manufacturing'>", "companySize": "<short size description, e.g. '10,000+ employees' or 'Small/startup'>", "foundedYear": <4-digit year as a number, or null if unknown>, "summary": "<one or two sentence factual summary of what the company does>"}
+{"industry": "<short industry/sector, e.g. 'Automotive manufacturing'>", "companySize": "<short size description, e.g. '10,000+ employees' or 'Small/startup'>", "foundedYear": <4-digit year as a number, or null if unknown>, "summary": "<one or two sentence factual summary of what the company does>", ${CONFIDENCE_FIELD_SPEC}}
 
 If you don't have reliable information about this specific company, respond with:
-{"industry": null, "companySize": null, "foundedYear": null, "summary": null}
+{"industry": null, "companySize": null, "foundedYear": null, "summary": null, "confidence": 0}
 
 Company: ${supplierName}`;
 
@@ -25,6 +35,7 @@ Company: ${supplierName}`;
     companySize: parsed.companySize || null,
     foundedYear: Number.isInteger(parsed.foundedYear) ? parsed.foundedYear : null,
     summary: parsed.summary || null,
+    confidence: extractConfidence(parsed),
     source: 'gemini',
     enrichedAt: new Date(),
   };
@@ -38,10 +49,10 @@ Company: ${supplierName}`;
 exports.enrichEsgData = async (supplierName) => {
   const prompt = `You are researching the company "${supplierName}" for a supplier-risk assessment tool.
 Respond with ONLY a JSON object, no markdown formatting, no code fences, in exactly this shape:
-{"environmentalScore": <0-100 number or null>, "socialScore": <0-100 number or null>, "governanceScore": <0-100 number or null>, "summary": "<one or two sentence factual summary of the company's ESG (environmental, social, governance) standing>"}
+{"environmentalScore": <0-100 number or null>, "socialScore": <0-100 number or null>, "governanceScore": <0-100 number or null>, "summary": "<one or two sentence factual summary of the company's ESG (environmental, social, governance) standing>", ${CONFIDENCE_FIELD_SPEC}}
 
 Base scores on real, known ESG ratings/reporting/controversies if you have them. If you don't have reliable ESG information about this specific company, respond with:
-{"environmentalScore": null, "socialScore": null, "governanceScore": null, "summary": null}
+{"environmentalScore": null, "socialScore": null, "governanceScore": null, "summary": null, "confidence": 0}
 
 Company: ${supplierName}`;
 
@@ -49,20 +60,12 @@ Company: ${supplierName}`;
   const jsonText = raw.replace(/```json|```/gi, '').trim();
   const parsed = JSON.parse(jsonText);
 
-  // Number(null) is 0, not NaN - a plain Number.isFinite(Number(value)) check
-  // would silently turn a genuine "I don't know" null into a misleading 0.
-  // Must reject null/undefined before coercing.
-  const clampScore = (value) => (
-    value === null || value === undefined || !Number.isFinite(Number(value))
-      ? null
-      : Math.max(0, Math.min(100, Number(value)))
-  );
-
   return {
-    environmentalScore: clampScore(parsed.environmentalScore),
-    socialScore: clampScore(parsed.socialScore),
-    governanceScore: clampScore(parsed.governanceScore),
+    environmentalScore: clampToRange(parsed.environmentalScore, 0, 100),
+    socialScore: clampToRange(parsed.socialScore, 0, 100),
+    governanceScore: clampToRange(parsed.governanceScore, 0, 100),
     summary: parsed.summary || null,
+    confidence: extractConfidence(parsed),
     source: 'gemini',
     refreshedAt: new Date(),
   };
@@ -76,10 +79,10 @@ Company: ${supplierName}`;
 exports.enrichLogisticsData = async (supplierName) => {
   const prompt = `You are researching the company "${supplierName}" for a supplier-risk assessment tool.
 Respond with ONLY a JSON object, no markdown formatting, no code fences, in exactly this shape:
-{"onTimeDeliveryRate": <0-100 number representing an estimated percentage, or null>, "averageLeadTimeDays": <number of days, or null>, "logisticsNotes": "<one or two sentence factual note on the company's known logistics/supply-chain operations, e.g. manufacturing footprint, shipping model, notable disruptions>"}
+{"onTimeDeliveryRate": <0-100 number representing an estimated percentage, or null>, "averageLeadTimeDays": <number of days, or null>, "logisticsNotes": "<one or two sentence factual note on the company's known logistics/supply-chain operations, e.g. manufacturing footprint, shipping model, notable disruptions>", ${CONFIDENCE_FIELD_SPEC}}
 
 Most companies don't publicly report on-time-delivery-rate or lead-time figures - if you don't have reliable, specific information about this company's logistics performance, respond with:
-{"onTimeDeliveryRate": null, "averageLeadTimeDays": null, "logisticsNotes": null}
+{"onTimeDeliveryRate": null, "averageLeadTimeDays": null, "logisticsNotes": null, "confidence": 0}
 
 Company: ${supplierName}`;
 
@@ -87,18 +90,11 @@ Company: ${supplierName}`;
   const jsonText = raw.replace(/```json|```/gi, '').trim();
   const parsed = JSON.parse(jsonText);
 
-  // Same null-vs-0 coercion trap as clampScore in enrichEsgData above -
-  // must reject null/undefined before Number() turns it into 0.
-  const toNumberOrNull = (value) => (
-    value === null || value === undefined || !Number.isFinite(Number(value)) ? null : Number(value)
-  );
-  const rate = toNumberOrNull(parsed.onTimeDeliveryRate);
-  const leadTime = toNumberOrNull(parsed.averageLeadTimeDays);
-
   return {
-    onTimeDeliveryRate: rate === null ? null : Math.max(0, Math.min(100, rate)),
-    averageLeadTimeDays: leadTime,
+    onTimeDeliveryRate: clampToRange(parsed.onTimeDeliveryRate, 0, 100),
+    averageLeadTimeDays: toNumberOrNull(parsed.averageLeadTimeDays),
     logisticsNotes: parsed.logisticsNotes || null,
+    confidence: extractConfidence(parsed),
     source: 'gemini',
     refreshedAt: new Date(),
   };
