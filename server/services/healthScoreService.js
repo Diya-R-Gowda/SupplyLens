@@ -1,6 +1,7 @@
 const Document = require('../models/Document');
 const HealthHistory = require('../models/HealthHistory');
 const { isRateLimited, applyCappedDelta } = require('./scoringEngine');
+const { getOrgWeights } = require('./riskConfigService');
 
 // Same defaults as riskScoreService - not tuned differently on purpose,
 // these are first-pass guardrail values either score can have independently
@@ -18,7 +19,9 @@ const RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
 // the Phase 4 audit explicitly warned against).
 //
 // Weighted formula, same "always answerable from factors alone" philosophy
-// as riskScore:
+// as riskScore. As of Phase 5 the weights below are per-org configurable
+// defaults (RiskConfig / riskConfigService.js) - the factor buckets
+// themselves (what a 0-100 sub-score means) stay fixed in code:
 //   - 25% ESG composite: average of environmental/social/governance scores
 //     if ESG has been refreshed; 50 (neutral - unassessed, not unhealthy) if not.
 //   - 20% logistics performance: onTimeDeliveryRate directly if known;
@@ -78,12 +81,13 @@ exports.computeHealthScore = async (supplier, reason = 'unspecified') => {
   }
 
   const factors = await computeHealthFactors(supplier);
+  const { health: weights } = await getOrgWeights(supplier.orgId);
   const rawScore = Math.round(
-    (factors.esgScore * 0.25)
-    + (factors.logisticsScore * 0.20)
-    + (factors.docCompletenessScore * 0.15)
-    + (factors.contractHealthScore * 0.15)
-    + (factors.riskComponent * 0.25)
+    (factors.esgScore * weights.esgScore)
+    + (factors.logisticsScore * weights.logisticsScore)
+    + (factors.docCompletenessScore * weights.docCompletenessScore)
+    + (factors.contractHealthScore * weights.contractHealthScore)
+    + (factors.riskComponent * weights.riskComponent)
   );
 
   const previousScore = supplier.healthScore;
