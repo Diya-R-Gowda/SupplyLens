@@ -12,6 +12,7 @@ import Badge from '../components/Badge';
 import Timeline from '../components/Timeline';
 import DigitalTwinPanel from '../components/DigitalTwinPanel';
 import SnapshotPanel from '../components/SnapshotPanel';
+import RiskHealthTrendChart from '../components/RiskHealthTrendChart';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -71,6 +72,9 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [takingSnapshot, setTakingSnapshot] = useState(false);
   const [snapshotError, setSnapshotError] = useState('');
 
+  const [riskHistory, setRiskHistory] = useState([]);
+  const [healthHistory, setHealthHistory] = useState([]);
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -87,12 +91,25 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     api.get(`/suppliers/${supplierId}/snapshots`).then((res) => setSnapshots(res.data.data || [])).catch(() => setSnapshots([]));
   };
 
+  // limit=30 - plenty for a trend chart's default view without over-fetching
+  // full history (GET .../risk-health-history also supports a `days` param
+  // and standard pagination for a fuller browsing view later, if needed).
+  const loadHistory = () => {
+    api.get(`/suppliers/${supplierId}/risk-health-history`, { params: { limit: 30 } })
+      .then((res) => {
+        setRiskHistory(res.data.data?.risk?.items || []);
+        setHealthHistory(res.data.data?.health?.items || []);
+      })
+      .catch(() => { setRiskHistory([]); setHealthHistory([]); });
+  };
+
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
     api.get(`/documents/${supplierId}`).then((res) => setDocuments(res.data.data || [])).catch(() => setDocuments([]));
     loadTimeline();
     loadTwin();
+    loadHistory();
     loadSnapshots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
@@ -133,6 +150,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setIsEditing(false);
       loadTimeline();
       loadTwin();
+      loadHistory();
       onChanged?.();
     } catch (requestError) {
       const details = requestError?.response?.data?.error?.details;
@@ -151,6 +169,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setSupplier((prev) => ({ ...prev, enrichment: response.data.data }));
       loadTimeline();
       loadTwin();
+      loadHistory();
     } catch (requestError) {
       setEnrichError(requestError?.response?.data?.error?.message || 'Unable to enrich supplier data.');
     } finally {
@@ -165,6 +184,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       await api.post(`/suppliers/${supplierId}/esg-refresh`);
       loadTimeline();
       loadTwin();
+      loadHistory();
     } catch (requestError) {
       setEsgError(requestError?.response?.data?.error?.message || 'Unable to refresh ESG data.');
     } finally {
@@ -179,6 +199,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       await api.post(`/suppliers/${supplierId}/logistics-refresh`);
       loadTimeline();
       loadTwin();
+      loadHistory();
     } catch (requestError) {
       setLogisticsError(requestError?.response?.data?.error?.message || 'Unable to refresh logistics data.');
     } finally {
@@ -356,6 +377,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 setDocuments(latestDocuments.data.data || []);
                 loadTimeline();
                 loadTwin();
+                loadHistory();
               } catch (uploadError) {
                 setUploadStatus(uploadError?.response?.data?.error?.message || 'Failed to process document.');
               }
@@ -429,6 +451,8 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             logisticsError={logisticsError}
           />
         </section>
+
+        <RiskHealthTrendChart riskItems={riskHistory} healthItems={healthHistory} />
 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
           <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Snapshots</h2>
