@@ -1,8 +1,9 @@
 const { gatherSupplierData } = require('./supplierAggregationService');
 const { computeFactors } = require('./riskScoreService');
 const { computeHealthFactors } = require('./healthScoreService');
-const { getOrgWeights } = require('./riskConfigService');
+const { getOrgWeights, getOrgAlertThresholds } = require('./riskConfigService');
 const { buildNarrativesForHistory } = require('./narrativeService');
+const { evaluateAlerts } = require('./alertService');
 
 // Synthesizes a "what is true about this supplier right now" profile -
 // the Digital Twin - from the same underlying collections the timeline
@@ -13,6 +14,8 @@ const { buildNarrativesForHistory } = require('./narrativeService');
 exports.buildSupplierTwin = async (supplier) => {
   const { documents, news, riskChanges, healthChanges } = await gatherSupplierData(supplier);
   const { risk: riskWeights, health: healthWeights } = await getOrgWeights(supplier.orgId);
+  const alertThresholds = await getOrgAlertThresholds(supplier.orgId);
+  const alerts = evaluateAlerts(supplier, alertThresholds);
 
   const factors = await computeFactors(supplier);
   const healthFactors = await computeHealthFactors(supplier);
@@ -118,6 +121,7 @@ exports.buildSupplierTwin = async (supplier) => {
       daysRemaining,
       status: contractStatus,
     },
+    alerts,
     generatedAt: new Date(),
   };
 };

@@ -993,7 +993,10 @@ router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
  *       Combines internal and external supplier data into a single "what is true about this
  *       supplier right now" profile - current risk score plus its live contributing factors,
  *       current enrichment/ESG/logistics data (each null if never refreshed), document count and
- *       most recent upload, a news sentiment rollup and most recent headline, and contract status.
+ *       most recent upload, a news sentiment rollup and most recent headline, contract status, and
+ *       an `alerts` object (Phase 5 Step 5) showing whether risk/health currently breach the org's
+ *       configured thresholds (server/services/alertService.js) - also computed fresh on every
+ *       read, so it's always accurate regardless of when the score last changed.
  *       Computed on every read from current data (not persisted) - the same precedent as the
  *       timeline endpoint, so it's always fresh by construction. See
  *       `GET /suppliers/{id}/timeline` for the equivalent chronological history view, and
