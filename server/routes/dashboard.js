@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Supplier = require('../models/Supplier');
+const HealthHistory = require('../models/HealthHistory');
 const { listDemoSuppliers } = require('../services/demoStore');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
@@ -47,6 +48,9 @@ const computeStatsFromList = (suppliers) => {
   const averageRiskScore = totalSuppliers
     ? roundToOneDecimal(suppliers.reduce((sum, s) => sum + (s.riskScore || 0), 0) / totalSuppliers)
     : 0;
+  const averageHealthScore = totalSuppliers
+    ? roundToOneDecimal(suppliers.reduce((sum, s) => sum + (s.healthScore ?? 50), 0) / totalSuppliers)
+    : 0;
 
   const categoryCounts = new Map();
   for (const supplier of suppliers) {
@@ -77,10 +81,14 @@ const computeStatsFromList = (suppliers) => {
   return {
     totalSuppliers,
     averageRiskScore,
+    averageHealthScore,
     byCategory,
     newSuppliers: { last7Days, last30Days },
     growthSeries,
     recentActivity,
+    // No demo-mode HealthHistory data, same precedent as ESG/logistics/twin/
+    // snapshots in Phase 4 (see TODO.md) - real-DB-only.
+    worseningHealth: [],
   };
 };
 
@@ -94,6 +102,9 @@ const computeStatsFromList = (suppliers) => {
  *       reducing client-side. growthSeries always has exactly 30 entries (oldest first, today
  *       last), zero-filled for days with no new suppliers. recentActivity is the 5 most recently
  *       updated suppliers (by updatedAt, so an edit surfaces a supplier here just like a create does).
+ *       worseningHealth is a separate query (HealthHistory) - up to 5 suppliers whose most recent
+ *       health change in the last 7 days was a decline, worst first. Not available in demo mode
+ *       (always empty).
  *     tags: [Dashboard]
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -108,6 +119,7 @@ const computeStatsFromList = (suppliers) => {
  *               data:
  *                 totalSuppliers: 6
  *                 averageRiskScore: 47.3
+ *                 averageHealthScore: 58.1
  *                 byCategory:
  *                   - { category: logistics, count: 3 }
  *                   - { category: raw_material, count: 1 }
@@ -147,7 +159,14 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     {
       $facet: {
         totals: [
-          { $group: { _id: null, totalSuppliers: { $sum: 1 }, averageRiskScore: { $avg: '$riskScore' } } },
+          {
+            $group: {
+              _id: null,
+              totalSuppliers: { $sum: 1 },
+              averageRiskScore: { $avg: '$riskScore' },
+              averageHealthScore: { $avg: '$healthScore' },
+            },
+          },
         ],
         byCategory: [
           { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -174,12 +193,36 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     },
   ]);
 
-  const totals = result.totals[0] || { totalSuppliers: 0, averageRiskScore: 0 };
+  const totals = result.totals[0] || { totalSuppliers: 0, averageRiskScore: 0, averageHealthScore: 0 };
   const countsByDate = new Map(result.growthByDay.map((entry) => [entry._id, entry.count]));
+
+  // Separate query (HealthHistory, not Supplier - can't share the $facet
+  // above) for a proportionate "portfolio trend" rollup: the 5 suppliers
+  // whose most recent health change in the last 7 days was a decline,
+  // worst first. One row per supplier (not every declining event), via
+  // $sort+$group picking the latest HealthHistory row per supplierId
+  // before filtering to declines - a supplier that later recovered
+  // shouldn't still show its earlier dip here.
+  const worseningHealthRaw = await HealthHistory.aggregate([
+    { $match: { orgId: new mongoose.Types.ObjectId(req.user.orgId), createdAt: { $gte: sevenDaysAgo } } },
+    { $sort: { supplierId: 1, createdAt: -1 } },
+    { $group: { _id: '$supplierId', delta: { $first: '$delta' }, newScore: { $first: '$newScore' }, createdAt: { $first: '$createdAt' } } },
+    { $match: { delta: { $lt: 0 } } },
+    { $sort: { delta: 1 } },
+    { $limit: 5 },
+    {
+      $lookup: {
+        from: 'suppliers', localField: '_id', foreignField: '_id', as: 'supplier',
+      },
+    },
+    { $unwind: '$supplier' },
+    { $project: { _id: 0, supplierId: '$_id', name: '$supplier.name', delta: 1, newScore: 1, createdAt: 1 } },
+  ]);
 
   return sendSuccess(res, {
     totalSuppliers: totals.totalSuppliers,
     averageRiskScore: totals.averageRiskScore != null ? roundToOneDecimal(totals.averageRiskScore) : 0,
+    averageHealthScore: totals.averageHealthScore != null ? roundToOneDecimal(totals.averageHealthScore) : 0,
     byCategory: result.byCategory.map((c) => ({ category: c._id || 'uncategorized', count: c.count })),
     newSuppliers: {
       last7Days: result.last7Days[0]?.count || 0,
@@ -187,6 +230,7 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     },
     growthSeries: mergeGrowthCounts(countsByDate),
     recentActivity: result.recentActivity,
+    worseningHealth: worseningHealthRaw,
   });
 }));
 

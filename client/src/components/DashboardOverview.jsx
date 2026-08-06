@@ -3,6 +3,7 @@ import StatCard from './StatCard';
 import CategoryDistributionChart from './CategoryDistributionChart';
 import SupplierGrowthChart from './SupplierGrowthChart';
 import RecentActivityFeed from './RecentActivityFeed';
+import WorseningHealthPanel from './WorseningHealthPanel';
 
 const SkeletonBlock = ({ className }) => (
   <div className={`rounded-2xl bg-white/60 border border-slate-400/25 animate-pulse ${className}`} />
@@ -45,9 +46,10 @@ export default function DashboardOverview({ stats, loading, error, onOpenSupplie
 
   return (
     <div className="grid gap-3.5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
         <StatCard label="Total suppliers" value={stats.totalSuppliers} />
         <StatCard label="Average risk score" value={`${stats.averageRiskScore} / 100`} />
+        <StatCard label="Average health score" value={`${stats.averageHealthScore} / 100`} />
         <StatCard
           label="New this month"
           value={stats.newSuppliers.last30Days}
@@ -61,7 +63,10 @@ export default function DashboardOverview({ stats, loading, error, onOpenSupplie
         <SupplierGrowthChart growthSeries={stats.growthSeries} />
       </div>
 
-      <RecentActivityFeed recentActivity={stats.recentActivity} onOpen={onOpenSupplier} />
+      <div className="grid lg:grid-cols-2 gap-3.5">
+        <RecentActivityFeed recentActivity={stats.recentActivity} onOpen={onOpenSupplier} />
+        <WorseningHealthPanel worseningHealth={stats.worseningHealth} onOpen={onOpenSupplier} />
+      </div>
     </div>
   );
 }
