@@ -1,5 +1,5 @@
 const RiskConfig = require('../models/RiskConfig');
-const { RISK_DEFAULT_WEIGHTS, HEALTH_DEFAULT_WEIGHTS } = RiskConfig;
+const { RISK_DEFAULT_WEIGHTS, HEALTH_DEFAULT_WEIGHTS, DEFAULT_ALERT_THRESHOLDS } = RiskConfig;
 
 // Tolerance for floating-point sums (0.4+0.3+0.2+0.1 isn't always exactly
 // 1.0 in IEEE754) - not a leniency toward genuinely mis-entered weights.
@@ -36,6 +36,28 @@ const validateWeights = (weights, expectedKeys) => {
 exports.validateRiskWeights = (weights) => validateWeights(weights, Object.keys(RISK_DEFAULT_WEIGHTS));
 exports.validateHealthWeights = (weights) => validateWeights(weights, Object.keys(HEALTH_DEFAULT_WEIGHTS));
 
+// No sum constraint (thresholds aren't weights) - just range/type/shape checks.
+exports.validateAlertThresholds = (thresholds) => {
+  const problems = [];
+  const keys = Object.keys(thresholds || {});
+  const expectedKeys = Object.keys(DEFAULT_ALERT_THRESHOLDS);
+  const extra = keys.filter((k) => !expectedKeys.includes(k));
+  if (extra.length) problems.push(`Unknown threshold fields: ${extra.join(', ')}`);
+
+  if ('riskThreshold' in thresholds) {
+    const v = thresholds.riskThreshold;
+    if (typeof v !== 'number' || Number.isNaN(v) || v < 0 || v > 100) problems.push('riskThreshold must be a number between 0 and 100');
+  }
+  if ('healthThreshold' in thresholds) {
+    const v = thresholds.healthThreshold;
+    if (typeof v !== 'number' || Number.isNaN(v) || v < 0 || v > 100) problems.push('healthThreshold must be a number between 0 and 100');
+  }
+  if ('enabled' in thresholds && typeof thresholds.enabled !== 'boolean') {
+    problems.push('enabled must be a boolean');
+  }
+  return problems;
+};
+
 // Read-only lookup used by the scoring services - deliberately does NOT
 // create a document if one doesn't exist yet (that only happens on the
 // first PATCH, in upsertOrgConfig below), so an org that never opens
@@ -48,19 +70,37 @@ exports.getOrgWeights = async (orgId) => {
   };
 };
 
+// Same read-only, no-side-effect contract as getOrgWeights, for the alert
+// threshold check in twinSyncService.js / twinService.js.
+exports.getOrgAlertThresholds = async (orgId) => {
+  const config = await RiskConfig.findOne({ orgId }).lean();
+  return config?.alertThresholds || DEFAULT_ALERT_THRESHOLDS;
+};
+
 exports.getOrgConfig = async (orgId) => {
   const config = await RiskConfig.findOne({ orgId }).lean();
   return {
     riskWeights: config?.riskWeights || RISK_DEFAULT_WEIGHTS,
     healthWeights: config?.healthWeights || HEALTH_DEFAULT_WEIGHTS,
+    alertThresholds: config?.alertThresholds || DEFAULT_ALERT_THRESHOLDS,
     isDefault: !config,
   };
 };
 
-exports.upsertOrgConfig = async (orgId, { riskWeights, healthWeights }) => {
+exports.upsertOrgConfig = async (orgId, { riskWeights, healthWeights, alertThresholds }) => {
   const update = {};
   if (riskWeights) update.riskWeights = riskWeights;
   if (healthWeights) update.healthWeights = healthWeights;
+  if (alertThresholds) {
+    // Partial threshold updates (e.g. just toggling `enabled`) merge onto
+    // the existing/default values rather than requiring the full object -
+    // unlike weights, there's no sum constraint forcing all-or-nothing.
+    const existing = await RiskConfig.findOne({ orgId }).lean();
+    update.alertThresholds = {
+      ...(existing?.alertThresholds || DEFAULT_ALERT_THRESHOLDS),
+      ...alertThresholds,
+    };
+  }
 
   const config = await RiskConfig.findOneAndUpdate(
     { orgId },
@@ -68,5 +108,10 @@ exports.upsertOrgConfig = async (orgId, { riskWeights, healthWeights }) => {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
 
-  return { riskWeights: config.riskWeights, healthWeights: config.healthWeights, isDefault: false };
+  return {
+    riskWeights: config.riskWeights,
+    healthWeights: config.healthWeights,
+    alertThresholds: config.alertThresholds,
+    isDefault: false,
+  };
 };

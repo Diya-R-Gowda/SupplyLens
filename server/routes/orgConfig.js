@@ -12,6 +12,7 @@ const {
   upsertOrgConfig,
   validateRiskWeights,
   validateHealthWeights,
+  validateAlertThresholds,
 } = require('../services/riskConfigService');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
@@ -20,17 +21,17 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  * @swagger
  * /org/risk-config:
  *   get:
- *     summary: Get the caller's org risk/health scoring weight configuration
+ *     summary: Get the caller's org risk/health scoring weight and alert threshold configuration
  *     description: >
- *       Any authenticated user in the org can view the current weights. If the org has never
+ *       Any authenticated user in the org can view the current config. If the org has never
  *       edited its config, this returns the same hardcoded defaults riskScoreService.js and
- *       healthScoreService.js used before Phase 5 (`isDefault: true`) - no document is created
- *       just by reading.
+ *       healthScoreService.js used before Phase 5, plus Phase 5 Step 5's default alert
+ *       thresholds (`isDefault: true`) - no document is created just by reading.
  *     tags: [Config]
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: Current weight configuration
+ *         description: Current configuration
  *         content:
  *           application/json:
  *             schema:
@@ -40,6 +41,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               data:
  *                 riskWeights: { newsScore: 0.4, expiryScore: 0.3, docScore: 0.2, countryScore: 0.1 }
  *                 healthWeights: { esgScore: 0.25, logisticsScore: 0.2, docCompletenessScore: 0.15, contractHealthScore: 0.15, riskComponent: 0.25 }
+ *                 alertThresholds: { riskThreshold: 70, healthThreshold: 30, enabled: true }
  *                 isDefault: true
  */
 router.get('/risk-config', auth, asyncHandler(async (req, res) => {
@@ -50,6 +52,7 @@ router.get('/risk-config', auth, asyncHandler(async (req, res) => {
     return sendSuccess(res, {
       riskWeights: RiskConfig.RISK_DEFAULT_WEIGHTS,
       healthWeights: RiskConfig.HEALTH_DEFAULT_WEIGHTS,
+      alertThresholds: RiskConfig.DEFAULT_ALERT_THRESHOLDS,
       isDefault: true,
     });
   }
@@ -62,13 +65,15 @@ router.get('/risk-config', auth, asyncHandler(async (req, res) => {
  * @swagger
  * /org/risk-config:
  *   patch:
- *     summary: Update the caller's org risk/health scoring weight configuration
+ *     summary: Update the caller's org risk/health scoring weights and/or alert thresholds
  *     description: >
  *       Admin-only. Each weight object (riskWeights/healthWeights), if provided, must include
  *       every field for that formula and sum to 1 (+/- 0.005 floating-point tolerance) - a
  *       partial or non-summing set of weights is rejected outright (400) rather than silently
- *       normalized, so a misconfigured org never silently gets nonsense scores. Either object
- *       may be omitted to leave that formula's weights unchanged. Not available in demo mode.
+ *       normalized, so a misconfigured org never silently gets nonsense scores. alertThresholds
+ *       has no sum constraint and accepts a partial object (e.g. just `{"enabled": false}`).
+ *       Any of the three top-level fields may be omitted to leave it unchanged. Not available
+ *       in demo mode.
  *     tags: [Config]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
@@ -93,15 +98,21 @@ router.get('/risk-config', auth, asyncHandler(async (req, res) => {
  *                   docCompletenessScore: { type: number }
  *                   contractHealthScore: { type: number }
  *                   riskComponent: { type: number }
+ *               alertThresholds:
+ *                 type: object
+ *                 properties:
+ *                   riskThreshold: { type: number, description: 'Alert when riskScore >= this value' }
+ *                   healthThreshold: { type: number, description: 'Alert when healthScore <= this value' }
+ *                   enabled: { type: boolean }
  *     responses:
  *       200:
- *         description: Updated weight configuration
+ *         description: Updated configuration
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/SuccessEnvelope'
  *       400:
- *         description: Weights missing a field or not summing to 1
+ *         description: Invalid weights/thresholds, or nothing provided to update
  *         content:
  *           application/json:
  *             schema:
@@ -118,21 +129,22 @@ router.patch('/risk-config', auth, requireRole('admin'), asyncHandler(async (req
     throw new ApiError('Risk config editing is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
   }
 
-  const { riskWeights, healthWeights } = req.body;
+  const { riskWeights, healthWeights, alertThresholds } = req.body;
 
-  if (!riskWeights && !healthWeights) {
-    throw new ApiError('Provide riskWeights and/or healthWeights to update', 400, 'NO_WEIGHTS_PROVIDED');
+  if (!riskWeights && !healthWeights && !alertThresholds) {
+    throw new ApiError('Provide riskWeights, healthWeights, and/or alertThresholds to update', 400, 'NO_CONFIG_PROVIDED');
   }
 
   const problems = [
     ...(riskWeights ? validateRiskWeights(riskWeights) : []),
     ...(healthWeights ? validateHealthWeights(healthWeights) : []),
+    ...(alertThresholds ? validateAlertThresholds(alertThresholds) : []),
   ];
   if (problems.length) {
-    throw new ApiError('Invalid weight configuration', 400, 'INVALID_WEIGHTS', { problems });
+    throw new ApiError('Invalid configuration', 400, 'INVALID_CONFIG', { problems });
   }
 
-  const config = await upsertOrgConfig(req.user.orgId, { riskWeights, healthWeights });
+  const config = await upsertOrgConfig(req.user.orgId, { riskWeights, healthWeights, alertThresholds });
   return sendSuccess(res, config);
 }));
 

@@ -19,6 +19,17 @@ const HEALTH_DEFAULT_WEIGHTS = Object.freeze({
   riskComponent: 0.25,
 });
 
+// Reasoned defaults (Phase 5 Step 5, see TODO.md) - chosen to roughly match
+// RiskBadge/HealthBadge's own existing "red zone" cutoffs (risk >66,
+// health <34) so a threshold breach lines up with what a user would already
+// read as "red" on the badge, rather than introducing a second, different
+// notion of "bad". Revisable per-org via PATCH /org/risk-config.
+const DEFAULT_ALERT_THRESHOLDS = Object.freeze({
+  riskThreshold: 70,
+  healthThreshold: 30,
+  enabled: true,
+});
+
 // One document per org (lazy-created on first PATCH, not on GET - see
 // riskConfigService.js - so orgs that never touch settings never get a row).
 // Weight fields are hard-validated to sum to ~1 at the route layer rather
@@ -40,8 +51,20 @@ const riskConfigSchema = new mongoose.Schema({
     contractHealthScore: { type: Number, min: 0, max: 1, default: HEALTH_DEFAULT_WEIGHTS.contractHealthScore },
     riskComponent: { type: Number, min: 0, max: 1, default: HEALTH_DEFAULT_WEIGHTS.riskComponent },
   },
+  // Alert Thresholds (Phase 5 Step 5). riskThreshold: alert when riskScore
+  // >= this value (risk is "too high"). healthThreshold: alert when
+  // healthScore <= this value (health is "too low") - inverted comparison
+  // direction on purpose, matching each score's own "bad" direction.
+  // `enabled` lets an org turn off alerting without losing its chosen
+  // threshold values.
+  alertThresholds: {
+    riskThreshold: { type: Number, min: 0, max: 100, default: DEFAULT_ALERT_THRESHOLDS.riskThreshold },
+    healthThreshold: { type: Number, min: 0, max: 100, default: DEFAULT_ALERT_THRESHOLDS.healthThreshold },
+    enabled: { type: Boolean, default: DEFAULT_ALERT_THRESHOLDS.enabled },
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('RiskConfig', riskConfigSchema);
 module.exports.RISK_DEFAULT_WEIGHTS = RISK_DEFAULT_WEIGHTS;
 module.exports.HEALTH_DEFAULT_WEIGHTS = HEALTH_DEFAULT_WEIGHTS;
+module.exports.DEFAULT_ALERT_THRESHOLDS = DEFAULT_ALERT_THRESHOLDS;
