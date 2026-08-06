@@ -14,6 +14,7 @@ import DigitalTwinPanel from '../components/DigitalTwinPanel';
 import SnapshotPanel from '../components/SnapshotPanel';
 import RiskHealthTrendChart from '../components/RiskHealthTrendChart';
 import ConfidenceBadge from '../components/ConfidenceBadge';
+import AlertBanner from '../components/AlertBanner';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -244,6 +245,11 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   return (
     <div className="flex min-h-[72vh] gap-4.5">
       <div className="flex-1 grid gap-5 overflow-y-auto">
+        <AlertBanner
+          alerts={twin?.alerts}
+          riskNarrative={twin?.risk?.lastChange?.narrative}
+          healthNarrative={twin?.health?.lastChange?.narrative}
+        />
         <div className="flex justify-between items-center gap-3">
           <Button onClick={onBack} className={pillButtonClass}>Back</Button>
           <div className="grid gap-1 justify-items-end">

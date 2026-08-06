@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const Supplier = require('../models/Supplier');
 const HealthHistory = require('../models/HealthHistory');
 const { listDemoSuppliers } = require('../services/demoStore');
+const { getOrgAlertThresholds } = require('../services/riskConfigService');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 
@@ -87,8 +88,10 @@ const computeStatsFromList = (suppliers) => {
     growthSeries,
     recentActivity,
     // No demo-mode HealthHistory data, same precedent as ESG/logistics/twin/
-    // snapshots in Phase 4 (see TODO.md) - real-DB-only.
+    // snapshots in Phase 4 (see TODO.md) - real-DB-only. Same for
+    // activeAlerts - RiskConfig thresholds are DB-only too.
     worseningHealth: [],
+    activeAlerts: [],
   };
 };
 
@@ -103,8 +106,10 @@ const computeStatsFromList = (suppliers) => {
  *       last), zero-filled for days with no new suppliers. recentActivity is the 5 most recently
  *       updated suppliers (by updatedAt, so an edit surfaces a supplier here just like a create does).
  *       worseningHealth is a separate query (HealthHistory) - up to 5 suppliers whose most recent
- *       health change in the last 7 days was a decline, worst first. Not available in demo mode
- *       (always empty).
+ *       health change in the last 7 days was a decline, worst first. activeAlerts (Phase 5 Step 5)
+ *       is up to 10 suppliers currently breaching the org's configured risk/health thresholds,
+ *       computed fresh from each supplier's current score - empty if alerting is disabled. Neither
+ *       is available in demo mode (both always empty).
  *     tags: [Dashboard]
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -219,6 +224,34 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     { $project: { _id: 0, supplierId: '$_id', name: '$supplier.name', delta: 1, newScore: 1, createdAt: 1 } },
   ]);
 
+  // Portfolio-wide "who currently needs attention" view for Phase 5 Step 5 -
+  // compute-on-read against each supplier's current persisted score, same
+  // as the per-supplier twin's alerts field, just org-wide instead of one
+  // supplier at a time. Capped at 10 (a dashboard rollup, not a full list -
+  // suppliers.js's own list/filter view is where an admin would go to see
+  // every affected supplier if there are more than this).
+  const alertThresholds = await getOrgAlertThresholds(req.user.orgId);
+  const activeAlerts = alertThresholds.enabled
+    ? await Supplier.find({
+      orgId: req.user.orgId,
+      $or: [
+        { riskScore: { $gte: alertThresholds.riskThreshold } },
+        { healthScore: { $lte: alertThresholds.healthThreshold } },
+      ],
+    })
+      .select('name riskScore healthScore')
+      .limit(10)
+      .lean()
+      .then((suppliers) => suppliers.map((s) => ({
+        supplierId: s._id,
+        name: s.name,
+        riskScore: s.riskScore,
+        healthScore: s.healthScore,
+        riskBreached: s.riskScore >= alertThresholds.riskThreshold,
+        healthBreached: s.healthScore <= alertThresholds.healthThreshold,
+      })))
+    : [];
+
   return sendSuccess(res, {
     totalSuppliers: totals.totalSuppliers,
     averageRiskScore: totals.averageRiskScore != null ? roundToOneDecimal(totals.averageRiskScore) : 0,
@@ -231,6 +264,7 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     growthSeries: mergeGrowthCounts(countsByDate),
     recentActivity: result.recentActivity,
     worseningHealth: worseningHealthRaw,
+    activeAlerts,
   });
 }));
 
