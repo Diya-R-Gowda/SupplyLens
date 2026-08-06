@@ -3,6 +3,7 @@ const Document = require('../models/Document');
 const RiskHistory = require('../models/RiskHistory');
 const countryRiskMap = require('../data/countryRisk.json');
 const { isRateLimited, applyCappedDelta } = require('./scoringEngine');
+const { getOrgWeights } = require('./riskConfigService');
 
 // Caps how much a single call can move the score, so a burst of negative
 // news (or a batch cron run touching many articles at once) can't produce a
@@ -17,7 +18,10 @@ const MAX_SCORE_DELTA = 15;
 const RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
 
 // Weighted, explainable v1 formula - deliberately not a black-box model, so
-// "why did this score change" is always answerable from `factors` alone:
+// "why did this score change" is always answerable from `factors` alone. The
+// factor *buckets* below are fixed in code (what a 0-100 sub-score means for
+// each signal); the *weights* combining them are per-org configurable via
+// RiskConfig (Phase 5 - riskConfigService.js), defaulting to these values:
 //   - 40% news sentiment: 2+ negative articles in the cache -> 100, 1 -> 50, 0 -> 0
 //   - 30% contract expiry: <=30 days -> 100, <=90 days -> 50, unknown -> 75 (treated as risky), else 0
 //   - 20% missing documents: 0 docs -> 100, 1-2 -> 50, 3+ -> 0
@@ -61,8 +65,12 @@ exports.computeRiskScore = async (supplier, reason = 'unspecified') => {
   }
 
   const factors = await computeFactors(supplier);
+  const { risk: weights } = await getOrgWeights(supplier.orgId);
   const rawScore = Math.round(
-    (factors.newsScore * 0.4) + (factors.expiryScore * 0.3) + (factors.docScore * 0.2) + (factors.countryScore * 0.1)
+    (factors.newsScore * weights.newsScore)
+    + (factors.expiryScore * weights.expiryScore)
+    + (factors.docScore * weights.docScore)
+    + (factors.countryScore * weights.countryScore)
   );
 
   const previousScore = supplier.riskScore;
