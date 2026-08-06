@@ -17,6 +17,14 @@ const healthHistorySchema = new mongoose.Schema({
     contractHealthScore: Number,
     riskComponent: Number,
   },
+  // The org's health weight config actually used to compute this row's raw
+  // score (Phase 5 - RiskConfig). Needed for narrativeService.js: weights
+  // are now editable over time, so explaining a change accurately requires
+  // knowing which weights were in effect at each of the two measurements
+  // being compared, not just today's config. Absent on rows written before
+  // this field existed - narrativeService falls back to the org's current
+  // weights for those.
+  weightsUsed: { type: mongoose.Schema.Types.Mixed },
 }, { timestamps: true });
 
 healthHistorySchema.index({ supplierId: 1, createdAt: -1 });

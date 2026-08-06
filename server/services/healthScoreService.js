@@ -108,6 +108,7 @@ exports.computeHealthScore = async (supplier, reason = 'unspecified') => {
     delta: newScore - previousScore,
     reason,
     factors,
+    weightsUsed: weights,
   });
 
   return { updated: true, previousScore, newScore, delta: newScore - previousScore, reason };
