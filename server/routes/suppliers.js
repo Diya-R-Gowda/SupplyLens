@@ -18,6 +18,7 @@ const { computeRiskScore } = require('../services/riskScoreService');
 const { computeHealthScore } = require('../services/healthScoreService');
 const NewsCache = require('../models/NewsCache');
 const RiskHistory = require('../models/RiskHistory');
+const HealthHistory = require('../models/HealthHistory');
 const mongoose = require('mongoose');
 const {
   listDemoSuppliers,
@@ -1288,6 +1289,100 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   return sendSuccess(res, events);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/risk-health-history:
+ *   get:
+ *     summary: Paginated risk and health score history, for trend charts
+ *     description: >
+ *       Reads RiskHistory/HealthHistory directly (unlike the timeline endpoint, which mixes them
+ *       with documents/news into one chronological feed) - built for plotting score-over-time
+ *       trend lines rather than a general activity feed. Each series is independently paginated,
+ *       most-recent-first (same convention as every other paginated endpoint); reverse client-side
+ *       for chronological chart order. An optional `days` param restricts to recent history (e.g.
+ *       `days=30` for a "recent trend" view) without needing pagination for that common case. Not
+ *       available in demo mode (returns empty series).
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: days
+ *         schema: { type: integer }
+ *         description: Only include changes from the last N days (applied before pagination).
+ *     responses:
+ *       200:
+ *         description: Paginated risk and health score history, most recent first in each series
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 risk:
+ *                   items:
+ *                     - timestamp: '2026-08-02T12:05:00.000Z'
+ *                       previousScore: 30
+ *                       newScore: 45
+ *                       delta: 15
+ *                       reason: scheduled_news_update
+ *                       factors: { newsScore: 100, expiryScore: 50, docScore: 50, countryScore: 50 }
+ *                   pagination: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ *                 health:
+ *                   items: []
+ *                   pagination: { total: 0, page: 1, limit: 20, totalPages: 1 }
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/risk-health-history', auth, asyncHandler(async (req, res) => {
+  const emptySeries = () => ({ items: [], ...buildPaginationMeta(0, 1, DEFAULT_PAGE_LIMIT) });
+  if (isDemoMode()) {
+    return sendSuccess(res, { risk: emptySeries(), health: emptySeries() });
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const { page, limit } = parsePagination(req.query.page, req.query.limit);
+  const days = parseInt(req.query.days, 10);
+  const dateFilter = Number.isFinite(days) && days > 0
+    ? { createdAt: { $gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) } }
+    : {};
+
+  const fetchSeries = async (Model) => {
+    const query = { supplierId: supplier._id, orgId: req.user.orgId, ...dateFilter };
+    const [docs, total] = await Promise.all([
+      Model.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Model.countDocuments(query),
+    ]);
+    const items = docs.map((d) => ({
+      timestamp: d.createdAt,
+      previousScore: d.previousScore,
+      newScore: d.newScore,
+      delta: d.delta,
+      reason: d.reason,
+      factors: d.factors,
+    }));
+    return { items, ...buildPaginationMeta(total, page, limit) };
+  };
+
+  const [risk, health] = await Promise.all([fetchSeries(RiskHistory), fetchSeries(HealthHistory)]);
+
+  return sendSuccess(res, { risk, health });
 }));
 
 module.exports = router;
