@@ -62,6 +62,12 @@ export default function Timeline({ events }) {
                   Factors - ESG: {event.factors.esgScore}, logistics: {event.factors.logisticsScore}, documents: {event.factors.docCompletenessScore}, contract: {event.factors.contractHealthScore}, risk-inverse: {event.factors.riskComponent}
                 </span>
               ) : null}
+              {(event.type === 'risk_changed' || event.type === 'health_changed') && event.narrative ? (
+                <details className="text-[0.78rem] text-slate-600 mt-0.5">
+                  <summary className="cursor-pointer font-semibold text-slate-500">Why did this change?</summary>
+                  <p className="m-0 mt-1">{event.narrative}</p>
+                </details>
+              ) : null}
             </div>
           </Card>
         );

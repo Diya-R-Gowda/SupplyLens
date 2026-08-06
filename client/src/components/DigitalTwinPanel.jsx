@@ -56,10 +56,18 @@ export default function DigitalTwinPanel({
           <Badge className={factorBadgeClass}>Country {risk.currentFactors.countryScore}</Badge>
         </div>
         {risk.lastChange ? (
-          <p className="m-0 text-[0.85rem] text-slate-500">
-            {risk.lastChange.delta > 0 ? '+' : ''}{risk.lastChange.delta} from {risk.lastChange.previousScore} on{' '}
-            {new Date(risk.lastChange.timestamp).toLocaleDateString()} ({risk.lastChange.reason?.replace(/_/g, ' ')})
-          </p>
+          <>
+            <p className="m-0 text-[0.85rem] text-slate-500">
+              {risk.lastChange.delta > 0 ? '+' : ''}{risk.lastChange.delta} from {risk.lastChange.previousScore} on{' '}
+              {new Date(risk.lastChange.timestamp).toLocaleDateString()} ({risk.lastChange.reason?.replace(/_/g, ' ')})
+            </p>
+            {risk.lastChange.narrative ? (
+              <details className="text-[0.8rem] text-slate-600">
+                <summary className="cursor-pointer font-semibold text-slate-500">Why did this change?</summary>
+                <p className="m-0 mt-1">{risk.lastChange.narrative}</p>
+              </details>
+            ) : null}
+          </>
         ) : null}
       </Card>
 
@@ -77,10 +85,18 @@ export default function DigitalTwinPanel({
             <Badge className={factorBadgeClass}>Risk-inverse {health.currentFactors.riskComponent}</Badge>
           </div>
           {health.lastChange ? (
-            <p className="m-0 text-[0.85rem] text-slate-500">
-              {health.lastChange.delta > 0 ? '+' : ''}{health.lastChange.delta} from {health.lastChange.previousScore} on{' '}
-              {new Date(health.lastChange.timestamp).toLocaleDateString()} ({health.lastChange.reason?.replace(/_/g, ' ')})
-            </p>
+            <>
+              <p className="m-0 text-[0.85rem] text-slate-500">
+                {health.lastChange.delta > 0 ? '+' : ''}{health.lastChange.delta} from {health.lastChange.previousScore} on{' '}
+                {new Date(health.lastChange.timestamp).toLocaleDateString()} ({health.lastChange.reason?.replace(/_/g, ' ')})
+              </p>
+              {health.lastChange.narrative ? (
+                <details className="text-[0.8rem] text-slate-600">
+                  <summary className="cursor-pointer font-semibold text-slate-500">Why did this change?</summary>
+                  <p className="m-0 mt-1">{health.lastChange.narrative}</p>
+                </details>
+              ) : null}
+            </>
           ) : null}
         </Card>
       ) : null}
