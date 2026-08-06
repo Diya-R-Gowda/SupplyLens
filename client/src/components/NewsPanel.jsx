@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import Badge from './Badge';
+import ConfidenceBadge from './ConfidenceBadge';
 
 const sentimentClasses = {
 	positive: 'bg-green-100 text-green-800',
@@ -59,6 +60,7 @@ export default function NewsPanel({ supplierId }) {
 						>
 							{item.sentiment || 'pending'}
 						</Badge>
+						<ConfidenceBadge confidence={item.sentimentConfidence} />
 						<time className="text-[0.85rem] text-slate-500">{item.publishedAt ? new Date(item.publishedAt).toLocaleString() : 'recent'}</time>
 					</div>
 					<p className="m-0 text-slate-900 leading-[1.6]">

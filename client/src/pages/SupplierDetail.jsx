@@ -13,6 +13,7 @@ import Timeline from '../components/Timeline';
 import DigitalTwinPanel from '../components/DigitalTwinPanel';
 import SnapshotPanel from '../components/SnapshotPanel';
 import RiskHealthTrendChart from '../components/RiskHealthTrendChart';
+import ConfidenceBadge from '../components/ConfidenceBadge';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -415,6 +416,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 <Badge className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[0.78rem] uppercase tracking-[0.08em]">
                   AI-generated - verify independently
                 </Badge>
+                <ConfidenceBadge confidence={supplier.enrichment.confidence} />
                 <span className="text-slate-500 text-[0.85rem]">
                   Last enriched {new Date(supplier.enrichment.enrichedAt).toLocaleString()}
                 </span>

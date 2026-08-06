@@ -3,6 +3,7 @@ import Badge from './Badge';
 import Button from './Button';
 import { RiskBadge } from './RiskBadge';
 import { HealthBadge } from './HealthBadge';
+import ConfidenceBadge from './ConfidenceBadge';
 
 const unverifiedBadgeClass = 'px-2.5 py-1 bg-amber-100 text-amber-800 text-[0.78rem] uppercase tracking-[0.08em]';
 const factorBadgeClass = 'px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]';
@@ -122,7 +123,10 @@ export default function DigitalTwinPanel({
         <p className="m-0 font-semibold text-slate-800">Company enrichment</p>
         {enrichment ? (
           <>
-            <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+              <ConfidenceBadge confidence={enrichment.confidence} />
+            </div>
             <p className="m-0 text-slate-900 text-[0.92rem]">{enrichment.summary || 'No summary available.'}</p>
           </>
         ) : (
@@ -142,7 +146,10 @@ export default function DigitalTwinPanel({
         {esgError ? <p className="m-0 text-red-700 text-[0.85rem]">{esgError}</p> : null}
         {esg ? (
           <>
-            <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+              <ConfidenceBadge confidence={esg.confidence} />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={factorBadgeClass}>Environmental {esg.environmentalScore ?? '—'}</Badge>
               <Badge className={factorBadgeClass}>Social {esg.socialScore ?? '—'}</Badge>
@@ -167,7 +174,10 @@ export default function DigitalTwinPanel({
         {logisticsError ? <p className="m-0 text-red-700 text-[0.85rem]">{logisticsError}</p> : null}
         {logistics ? (
           <>
-            <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={unverifiedBadgeClass}>AI-generated - verify independently</Badge>
+              <ConfidenceBadge confidence={logistics.confidence} />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={factorBadgeClass}>
                 On-time delivery {logistics.onTimeDeliveryRate !== null ? `${logistics.onTimeDeliveryRate}%` : 'unknown'}
