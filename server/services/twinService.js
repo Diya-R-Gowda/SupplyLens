@@ -1,6 +1,8 @@
 const { gatherSupplierData } = require('./supplierAggregationService');
 const { computeFactors } = require('./riskScoreService');
 const { computeHealthFactors } = require('./healthScoreService');
+const { getOrgWeights } = require('./riskConfigService');
+const { buildNarrativesForHistory } = require('./narrativeService');
 
 // Synthesizes a "what is true about this supplier right now" profile -
 // the Digital Twin - from the same underlying collections the timeline
@@ -10,6 +12,7 @@ const { computeHealthFactors } = require('./healthScoreService');
 // (Phase 4 Step 3) is what persists a point-in-time copy of this shape.
 exports.buildSupplierTwin = async (supplier) => {
   const { documents, news, riskChanges, healthChanges } = await gatherSupplierData(supplier);
+  const { risk: riskWeights, health: healthWeights } = await getOrgWeights(supplier.orgId);
 
   const factors = await computeFactors(supplier);
   const healthFactors = await computeHealthFactors(supplier);
@@ -21,6 +24,17 @@ exports.buildSupplierTwin = async (supplier) => {
   const lastHealthChange = healthChanges
     .slice()
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+
+  // Same batch narrative builder the timeline endpoint uses, on the same
+  // riskChanges/healthChanges data - only the latest entry's narrative is
+  // actually used below, but building it via the shared helper guarantees
+  // this and the timeline never explain the same change differently.
+  const lastRiskNarrative = lastRiskChange
+    ? buildNarrativesForHistory(riskChanges, riskWeights, 'risk').get(String(lastRiskChange._id))
+    : null;
+  const lastHealthNarrative = lastHealthChange
+    ? buildNarrativesForHistory(healthChanges, healthWeights, 'health').get(String(lastHealthChange._id))
+    : null;
 
   const sortedDocuments = documents
     .slice()
@@ -63,6 +77,7 @@ exports.buildSupplierTwin = async (supplier) => {
         delta: lastRiskChange.delta,
         reason: lastRiskChange.reason,
         timestamp: lastRiskChange.createdAt,
+        narrative: lastRiskNarrative,
       },
     },
     health: {
@@ -74,6 +89,7 @@ exports.buildSupplierTwin = async (supplier) => {
         delta: lastHealthChange.delta,
         reason: lastHealthChange.reason,
         timestamp: lastHealthChange.createdAt,
+        narrative: lastHealthNarrative,
       },
     },
     enrichment: supplier.enrichment?.enrichedAt ? supplier.enrichment : null,

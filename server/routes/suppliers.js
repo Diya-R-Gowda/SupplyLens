@@ -10,6 +10,8 @@ const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
+const { getOrgWeights } = require('../services/riskConfigService');
+const { buildNarrativesForHistory } = require('../services/narrativeService');
 const { buildSupplierTwin } = require('../services/twinService');
 const { takeSnapshot } = require('../services/snapshotService');
 const SupplierSnapshot = require('../models/SupplierSnapshot');
@@ -1202,7 +1204,11 @@ router.get('/:id/snapshots/:snapshotId', auth, asyncHandler(async (req, res) => 
  *       rather than a dedicated event-log model - avoids duplicating data that already exists
  *       elsewhere and needing to keep it in sync. Merges supplier_created / supplier_updated (only
  *       if the supplier has actually been edited since creation) / document_uploaded /
- *       news_mentioned / risk_changed events, sorted most recent first. Not available in demo mode.
+ *       news_mentioned / risk_changed events, sorted most recent first. risk_changed/health_changed
+ *       events include a `narrative` field - a deterministic, weight-aware plain-language
+ *       explanation (narrativeService.js) of what mainly drove that particular change, computed
+ *       by comparing this change's factors against the immediately preceding change's factors.
+ *       Not available in demo mode.
  *     tags: [Suppliers]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -1226,6 +1232,7 @@ router.get('/:id/snapshots/:snapshotId', auth, asyncHandler(async (req, res) => 
  *                   newScore: 45
  *                   delta: 15
  *                   reason: scheduled_news_update
+ *                   narrative: Risk score rose by +15, mainly because of negative news sentiment (40% of the formula).
  *                 - type: news_mentioned
  *                   timestamp: '2026-08-02T11:00:00.000Z'
  *                   headline: Example headline
@@ -1253,6 +1260,9 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
 
   const { documents, news, riskChanges, healthChanges } = await gatherSupplierData(supplier);
+  const { risk: riskWeights, health: healthWeights } = await getOrgWeights(supplier.orgId);
+  const riskNarratives = buildNarrativesForHistory(riskChanges, riskWeights, 'risk');
+  const healthNarratives = buildNarrativesForHistory(healthChanges, healthWeights, 'health');
 
   const events = [
     { type: 'supplier_created', timestamp: supplier.createdAt },
@@ -1276,6 +1286,7 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
       delta: change.delta,
       reason: change.reason,
       factors: change.factors,
+      narrative: riskNarratives.get(String(change._id)),
     })),
     ...healthChanges.map((change) => ({
       type: 'health_changed',
@@ -1285,6 +1296,7 @@ router.get('/:id/timeline', auth, asyncHandler(async (req, res) => {
       delta: change.delta,
       reason: change.reason,
       factors: change.factors,
+      narrative: healthNarratives.get(String(change._id)),
     })),
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
