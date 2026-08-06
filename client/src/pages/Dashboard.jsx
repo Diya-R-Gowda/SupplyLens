@@ -4,6 +4,7 @@ import SupplierCard from '../components/SupplierCard';
 import SupplierDetail from './SupplierDetail';
 import Button from '../components/Button';
 import DashboardOverview from '../components/DashboardOverview';
+import RiskConfigPanel from '../components/RiskConfigPanel';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -21,6 +22,7 @@ export default function Dashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -124,7 +126,9 @@ export default function Dashboard({ user, onLogout }) {
 
   return (
     <div className="grid gap-5">
-      {selectedSupplier ? (
+      {showSettings ? (
+        <RiskConfigPanel onBack={() => setShowSettings(false)} />
+      ) : selectedSupplier ? (
         <SupplierDetail
           supplierId={selectedSupplier._id}
           user={user}
@@ -138,9 +142,16 @@ export default function Dashboard({ user, onLogout }) {
               <p className="m-0 uppercase tracking-[0.18em] text-xs font-bold text-[#3853b5]">Live API data</p>
               <h1 className="mt-2 mb-0 text-[clamp(1.8rem,4vw,2.8rem)] leading-[1.05] text-slate-900">Supplier dashboard</h1>
             </div>
-            <Button onClick={onLogout} className="rounded-full px-3.5 py-2.5">
-              Sign out
-            </Button>
+            <div className="flex items-center gap-2.5">
+              {user?.role === 'admin' ? (
+                <Button onClick={() => setShowSettings(true)} className="rounded-full px-3.5 py-2.5">
+                  Scoring weights
+                </Button>
+              ) : null}
+              <Button onClick={onLogout} className="rounded-full px-3.5 py-2.5">
+                Sign out
+              </Button>
+            </div>
           </div>
 
           <DashboardOverview stats={stats} loading={statsLoading} error={statsError} onOpenSupplier={setSelectedSupplier} />
