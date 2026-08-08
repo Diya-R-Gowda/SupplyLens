@@ -8,6 +8,7 @@ const Supplier = require('../models/Supplier');
 const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
+const { deleteSupplierCascade } = require('../services/supplierCascadeService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -558,6 +559,10 @@ router.patch('/:id', auth, requireRole('admin'), validate(updateSupplierValidati
  * /suppliers/{id}:
  *   delete:
  *     summary: Delete a supplier (admin only)
+ *     description: >
+ *       Hard, permanent delete that cascades to every collection referencing this supplier -
+ *       documents, doc chunks, GridFS binaries, news cache, conversations, risk/health history,
+ *       and snapshots - so nothing is left orphaned behind it.
  *     tags: [Suppliers]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -614,7 +619,7 @@ router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) 
   }
 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId);
-  await supplier.deleteOne();
+  await deleteSupplierCascade(supplier);
   return sendSuccess(res, null, { message: 'Supplier deleted' });
 }));
 
