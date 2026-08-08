@@ -12,6 +12,7 @@ const { deleteSupplierCascade } = require('../services/supplierCascadeService');
 const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
 const { simulateSupplierFailure } = require('../services/simulationService');
 const { generateMitigationStrategies } = require('../services/mitigationService');
+const { findAlternativeSuppliers } = require('../services/similarityService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1576,6 +1577,61 @@ router.post('/:id/mitigation-strategies', auth, asyncHandler(async (req, res) =>
   const simulation = await simulateSupplierFailure(supplier);
   const mitigation = await generateMitigationStrategies(simulation);
   return sendSuccess(res, mitigation);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/alternatives:
+ *   get:
+ *     summary: Phase 7 Step 3 - alternative supplier recommendations, honestly gated by real comparable data
+ *     description: >
+ *       Compares this supplier against every OTHER supplier in the org sharing the same category
+ *       (a hard filter - category is required to be considered a sensible alternative at all).
+ *       Country match, risk/health-score proximity, and enrichment/ESG/logistics proximity are all
+ *       SOFT scoring dimensions that only count when the relevant data is actually real on BOTH
+ *       suppliers being compared (risk/health require an actual assessed history, not just the
+ *       untouched schema default; enrichment/ESG/logistics require both to have been populated) -
+ *       never silently assumed. The response always states exactly how many candidates were found
+ *       and how many of them each optional dimension was actually available for
+ *       (`comparisonBasis`), and returns `status: no_alternatives_found` rather than a guess when
+ *       the candidate pool is empty - expected to be the common result today, given how sparse the
+ *       current supplier set is (see the Phase 7 audit in CONTRIBUTING.md). Not available in demo
+ *       mode.
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Ranked alternatives with an honest comparison-basis breakdown, or an explicit no_alternatives_found result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/alternatives', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Alternative supplier recommendations are not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const alternatives = await findAlternativeSuppliers(supplier);
+  return sendSuccess(res, alternatives);
 }));
 
 module.exports = router;
