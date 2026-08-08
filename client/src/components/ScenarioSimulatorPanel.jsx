@@ -21,7 +21,10 @@ const COMPLETENESS_STYLE = {
 // "AI-generated - verify independently" badge convention already established
 // for enrichment/ESG/logistics; every real-data section is labeled Real data
 // so the two are never visually ambiguous.
-export default function ScenarioSimulatorPanel({ simulation, onRunSimulation, simulating, simulationError }) {
+export default function ScenarioSimulatorPanel({
+  simulation, onRunSimulation, simulating, simulationError,
+  mitigation, onGenerateMitigation, mitigating, mitigationError,
+}) {
   return (
     <div className="grid gap-3.5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -99,6 +102,38 @@ export default function ScenarioSimulatorPanel({ simulation, onRunSimulation, si
               <Badge className="px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]">Neutral {simulation.recentNews.sentimentCounts.neutral}</Badge>
               <Badge className="px-2.5 py-1 bg-red-100 text-red-800 text-[0.85rem]">Negative {simulation.recentNews.sentimentCounts.negative}</Badge>
             </div>
+          </Card>
+
+          <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="m-0 font-semibold text-slate-800">Mitigation strategies</p>
+              <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onGenerateMitigation} loading={mitigating} loadingText="Generating...">
+                {mitigation ? 'Regenerate' : 'Generate with AI'}
+              </Button>
+            </div>
+            {mitigationError ? <p className="m-0 text-red-700 text-[0.85rem]">{mitigationError}</p> : null}
+            {mitigation ? (
+              <>
+                <Badge className={aiBadgeClass}>AI-generated - verify independently</Badge>
+                <div className="grid gap-2.5">
+                  {mitigation.strategies.map((item, index) => (
+                    <div key={index} className="grid gap-1 p-3 rounded-xl bg-white/80 border border-slate-300/50">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="m-0 font-semibold text-slate-900 text-[0.92rem]">{item.strategy}</p>
+                        {typeof item.confidence === 'number' ? (
+                          <Badge className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[0.75rem]">
+                            Confidence {Math.round(item.confidence * 100)}%
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="m-0 text-slate-600 text-[0.85rem]">{item.rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="m-0 text-slate-600 text-[0.85rem]">Generate AI-suggested mitigation strategies based on this supplier's real profile above.</p>
+            )}
           </Card>
         </>
       ) : (

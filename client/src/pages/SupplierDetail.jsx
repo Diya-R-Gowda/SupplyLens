@@ -84,6 +84,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [simulating, setSimulating] = useState(false);
   const [simulationError, setSimulationError] = useState('');
 
+  const [mitigation, setMitigation] = useState(null);
+  const [mitigating, setMitigating] = useState(false);
+  const [mitigationError, setMitigationError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -235,6 +239,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setSimulationError(requestError?.response?.data?.error?.message || 'Unable to run simulation.');
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleGenerateMitigation = async () => {
+    setMitigating(true);
+    setMitigationError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/mitigation-strategies`);
+      setMitigation(response.data.data);
+    } catch (requestError) {
+      setMitigationError(requestError?.response?.data?.error?.message || 'Unable to generate mitigation strategies.');
+    } finally {
+      setMitigating(false);
     }
   };
 
@@ -507,6 +524,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onRunSimulation={handleRunSimulation}
             simulating={simulating}
             simulationError={simulationError}
+            mitigation={mitigation}
+            onGenerateMitigation={handleGenerateMitigation}
+            mitigating={mitigating}
+            mitigationError={mitigationError}
           />
         </section>
 
