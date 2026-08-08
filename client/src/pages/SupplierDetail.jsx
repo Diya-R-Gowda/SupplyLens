@@ -110,6 +110,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [riskAnalystLoading, setRiskAnalystLoading] = useState(false);
   const [riskAnalystError, setRiskAnalystError] = useState('');
 
+  const [legal, setLegal] = useState(null);
+  const [legalLoading, setLegalLoading] = useState(false);
+  const [legalError, setLegalError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -357,6 +361,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setRiskAnalystError(requestError?.response?.data?.error?.message || 'Unable to run the Risk Analyst agent.');
     } finally {
       setRiskAnalystLoading(false);
+    }
+  };
+
+  const handleRunLegal = async () => {
+    setLegalLoading(true);
+    setLegalError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/legal`);
+      setLegal(response.data.data);
+    } catch (requestError) {
+      setLegalError(requestError?.response?.data?.error?.message || 'Unable to run the Legal agent.');
+    } finally {
+      setLegalLoading(false);
     }
   };
 
@@ -661,6 +678,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onRunRiskAnalyst={handleRunRiskAnalyst}
             riskAnalystLoading={riskAnalystLoading}
             riskAnalystError={riskAnalystError}
+            legal={legal}
+            onRunLegal={handleRunLegal}
+            legalLoading={legalLoading}
+            legalError={legalError}
           />
         </section>
 

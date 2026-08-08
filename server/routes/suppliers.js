@@ -16,6 +16,7 @@ const { findAlternativeSuppliers } = require('../services/similarityService');
 const { computeBusinessImpact } = require('../services/businessImpactService');
 const { estimateRecoveryTime } = require('../services/recoveryPlanningService');
 const { analyzeRisk } = require('../services/riskAnalystAgentService');
+const { analyzeLegalDocuments } = require('../services/legalAgentService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1902,6 +1903,64 @@ router.post('/:id/agents/risk-analyst', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const assessment = await analyzeRisk(supplier);
   return sendSuccess(res, assessment);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/legal:
+ *   post:
+ *     summary: Phase 8 Step 2 - Legal Agent, structured extraction over this supplier's real uploaded documents
+ *     description: >
+ *       Reuses ragService.js's real retrieval logic (embed a query, vector search with retry, resolve
+ *       real source filenames) - the second-strongest-grounded agent per the audit, since it's a
+ *       different query pattern (structured extraction across 5 legal topics) over real document
+ *       text rather than a new data source. Zero documents on file, and zero relevant content found
+ *       for any topic, are both handled as honest states (`status: 'no_documents'` /
+ *       `'no_relevant_content'`), never as an error or a guess. Every finding is traceable to a real
+ *       excerpt from an actually-uploaded document; `documentsReviewed`/`topicsCovered` are computed
+ *       from real retrieval results, independent of anything Gemini claims. Not available in demo
+ *       mode (needs Atlas vector search).
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Structured legal findings with source excerpts, or an honest no-documents/no-relevant-content state
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/legal', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The Legal agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const review = await analyzeLegalDocuments(supplier);
+  return sendSuccess(res, review);
 }));
 
 module.exports = router;

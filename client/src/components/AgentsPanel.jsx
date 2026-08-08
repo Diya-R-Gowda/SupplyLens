@@ -22,6 +22,7 @@ const ConfidenceBadge = ({ value }) => (
 
 export default function AgentsPanel({
   riskAnalyst, onRunRiskAnalyst, riskAnalystLoading, riskAnalystError,
+  legal, onRunLegal, legalLoading, legalError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -65,6 +66,49 @@ export default function AgentsPanel({
           </>
         ) : (
           <p className="m-0 text-slate-600 text-[0.85rem]">Synthesize this supplier's real risk/health scores, history, forecast, and anomaly data into one written assessment.</p>
+        )}
+      </Card>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">Legal</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onRunLegal} loading={legalLoading} loadingText="Reviewing...">
+            {legal ? 'Re-run review' : 'Review documents'}
+          </Button>
+        </div>
+        {legalError ? <p className="m-0 text-red-700 text-[0.85rem]">{legalError}</p> : null}
+        {legal ? (
+          legal.status === 'ok' ? (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={genuineBadgeClass}>Genuine extraction from real documents</Badge>
+                <ConfidenceBadge value={legal.confidence} />
+              </div>
+              <p className="m-0 text-slate-600 text-[0.85rem]">{legal.summary}</p>
+              <div className="grid gap-2">
+                {legal.findings.map((f, index) => (
+                  <div key={index} className="grid gap-1 p-3 rounded-xl bg-white/80 border border-slate-300/50">
+                    <div className="flex items-center gap-2">
+                      <Badge className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[0.75rem] capitalize">{f.topic}</Badge>
+                    </div>
+                    <p className="m-0 text-slate-900 text-[0.88rem]">{f.finding}</p>
+                    {f.excerpt ? <p className="m-0 text-slate-500 text-[0.8rem] italic">&quot;{f.excerpt}&quot;</p> : null}
+                  </div>
+                ))}
+              </div>
+              {legal.missingStandardTerms.length ? (
+                <p className="m-0 text-orange-700 text-[0.85rem]">Possibly missing: {legal.missingStandardTerms.join('; ')}</p>
+              ) : null}
+              <p className="m-0 text-slate-400 text-[0.78rem]">Reviewed: {legal.documentsReviewed.join(', ')}</p>
+            </>
+          ) : (
+            <>
+              <Badge className={focusedLensBadgeClass}>Real data - honest result</Badge>
+              <p className="m-0 text-slate-600 text-[0.85rem]">{legal.summary}</p>
+            </>
+          )
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">Extract termination, renewal, compliance, liability, and payment findings from this supplier's real uploaded documents.</p>
         )}
       </Card>
     </div>
