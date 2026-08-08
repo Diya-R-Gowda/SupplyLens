@@ -114,6 +114,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [legalLoading, setLegalLoading] = useState(false);
   const [legalError, setLegalError] = useState('');
 
+  const [finance, setFinance] = useState(null);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeError, setFinanceError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -374,6 +378,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setLegalError(requestError?.response?.data?.error?.message || 'Unable to run the Legal agent.');
     } finally {
       setLegalLoading(false);
+    }
+  };
+
+  const handleRunFinance = async () => {
+    setFinanceLoading(true);
+    setFinanceError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/finance`);
+      setFinance(response.data.data);
+    } catch (requestError) {
+      setFinanceError(requestError?.response?.data?.error?.message || 'Unable to run the Finance agent.');
+    } finally {
+      setFinanceLoading(false);
     }
   };
 
@@ -682,6 +699,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onRunLegal={handleRunLegal}
             legalLoading={legalLoading}
             legalError={legalError}
+            finance={finance}
+            onRunFinance={handleRunFinance}
+            financeLoading={financeLoading}
+            financeError={financeError}
           />
         </section>
 

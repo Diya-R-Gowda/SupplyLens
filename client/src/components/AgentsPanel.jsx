@@ -1,6 +1,7 @@
 import Card from './Card';
 import Badge from './Badge';
 import Button from './Button';
+import { estimateBadgeClass, realBadgeClass } from './ScenarioSimulatorPanel';
 
 // Phase 8 - "Agents" panel. Per the CONTRIBUTING.md audit: there is no
 // multi-step tool-calling framework anywhere in this app, so "agent" here
@@ -23,6 +24,7 @@ const ConfidenceBadge = ({ value }) => (
 export default function AgentsPanel({
   riskAnalyst, onRunRiskAnalyst, riskAnalystLoading, riskAnalystError,
   legal, onRunLegal, legalLoading, legalError,
+  finance, onRunFinance, financeLoading, financeError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -109,6 +111,48 @@ export default function AgentsPanel({
           )
         ) : (
           <p className="m-0 text-slate-600 text-[0.85rem]">Extract termination, renewal, compliance, liability, and payment findings from this supplier's real uploaded documents.</p>
+        )}
+      </Card>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">Finance</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onRunFinance} loading={financeLoading} loadingText="Analyzing...">
+            {finance ? 'Re-run analysis' : 'Analyze finances'}
+          </Button>
+        </div>
+        {financeError ? <p className="m-0 text-red-700 text-[0.85rem]">{financeError}</p> : null}
+        {finance ? (
+          <>
+            {finance.businessImpact.mode === 'real' ? (
+              <>
+                <Badge className={realBadgeClass}>Real calculation</Badge>
+                <p className="m-0 text-slate-900 text-[0.9rem]">{finance.businessImpact.summary}</p>
+              </>
+            ) : (
+              <>
+                <Badge className={estimateBadgeClass}>{finance.businessImpact.label}</Badge>
+                {finance.businessImpact.estimatedAnnualSpendRange ? (
+                  <p className="m-0 text-slate-900 text-[0.9rem]">
+                    Estimated annual spend: {finance.businessImpact.estimatedAnnualSpendRange.low.toLocaleString('en-US')} - {finance.businessImpact.estimatedAnnualSpendRange.high.toLocaleString('en-US')} {finance.businessImpact.estimatedAnnualSpendRange.currency}
+                  </p>
+                ) : (
+                  <p className="m-0 text-slate-600 text-[0.9rem]">Gemini had no reasonable basis to estimate spend for this supplier.</p>
+                )}
+              </>
+            )}
+            <div className="grid gap-1.5 pt-1 border-t border-slate-200">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={abstainBadgeClass}>Not answered - no data source exists</Badge>
+                <p className="m-0 font-semibold text-slate-700 text-[0.82rem]">Payment history</p>
+              </div>
+              <p className="m-0 text-slate-500 text-[0.8rem]">{finance.paymentHistory.message}</p>
+              <p className="m-0 font-semibold text-slate-700 text-[0.82rem]">Invoices</p>
+              <p className="m-0 text-slate-500 text-[0.8rem]">{finance.invoices.message}</p>
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">Real business-impact math (or a labeled AI estimate) - payment history and invoices are always explicitly not answered, never guessed.</p>
         )}
       </Card>
     </div>

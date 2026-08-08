@@ -17,6 +17,7 @@ const { computeBusinessImpact } = require('../services/businessImpactService');
 const { estimateRecoveryTime } = require('../services/recoveryPlanningService');
 const { analyzeRisk } = require('../services/riskAnalystAgentService');
 const { analyzeLegalDocuments } = require('../services/legalAgentService');
+const { analyzeFinance } = require('../services/financeAgentService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1961,6 +1962,65 @@ router.post('/:id/agents/legal', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const review = await analyzeLegalDocuments(supplier);
   return sendSuccess(res, review);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/finance:
+ *   post:
+ *     summary: Phase 8 Step 3 - Finance Agent, real business-impact math or estimate plus a hardcoded abstention on unknowable claims
+ *     description: >
+ *       Reuses Phase 7's businessImpactService directly (`businessImpact.mode: 'real'` when
+ *       contractValue/estimatedAnnualSpend are populated, `'ai_estimate'` otherwise) - no
+ *       reimplementation. Adds exactly one new thing: `paymentHistory` and `invoices` are ALWAYS a
+ *       hardcoded abstention message, never a number and never a Gemini guess, in both modes. This
+ *       is a different category of gap than business impact - there is no public or inferable source
+ *       anywhere for a specific org's private transaction history with a specific supplier, unlike
+ *       company size/industry or even a typical contract value range. Verified live during
+ *       development that a prompt-level "don't guess" instruction alone is not reliable for this
+ *       specific claim (see CONTRIBUTING.md/commit history) - the abstention is enforced in code, not
+ *       requested in a prompt. Not available in demo mode.
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Business impact (real or AI-estimated) plus a hardcoded abstention on payment history and invoices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response (AI-estimate mode only) - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/finance', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The Finance agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const analysis = await analyzeFinance(supplier);
+  return sendSuccess(res, analysis);
 }));
 
 module.exports = router;
