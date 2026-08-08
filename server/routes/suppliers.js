@@ -10,6 +10,7 @@ const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { deleteSupplierCascade } = require('../services/supplierCascadeService');
 const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
+const { simulateSupplierFailure } = require('../services/simulationService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1464,6 +1465,60 @@ router.get('/:id/forecast', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const forecast = await getSupplierForecast(supplier);
   return sendSuccess(res, forecast);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/simulate-failure:
+ *   post:
+ *     summary: Phase 7 Step 1 - simulate this supplier failing/shutting down, using only real existing data
+ *     description: >
+ *       Computes "what we'd actually lose" from real data already on file - current risk/health
+ *       scores and their live contributing factors, contract status, document count, recent news
+ *       sentiment, and concentration risk (how many other suppliers in this org share this
+ *       supplier's category/country - a sole-source supplier is a bigger real loss than one of
+ *       many). Deliberately produces no speculative dollar figure or time estimate - see
+ *       `POST /suppliers/{id}/business-fields` and `GET /suppliers/{id}/recovery-estimate` for
+ *       those, both explicitly AI-estimated where real fields aren't populated. A `dataCompleteness`
+ *       field reports how much is actually known about this supplier (documents, enrichment/ESG/
+ *       logistics) as real signal in its own right - a thin profile means a thinner picture of real
+ *       impact, not a hidden gap. Not available in demo mode (needs the org's real supplier set to
+ *       compute concentration risk against).
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Structured failure-simulation breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/simulate-failure', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Failure simulation is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const simulation = await simulateSupplierFailure(supplier);
+  return sendSuccess(res, simulation);
 }));
 
 module.exports = router;

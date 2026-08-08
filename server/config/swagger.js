@@ -28,6 +28,7 @@ const options = {
       { name: 'RAG', description: 'Ask questions about a supplier\'s ingested contract documents.' },
       { name: 'Config', description: 'Per-org configurable risk/health scoring weights and alert thresholds.' },
       { name: 'Forecasting', description: 'Phase 6 - hand-rolled linear-regression forecasts (per-supplier and portfolio-level), gated on real data sufficiency.' },
+      { name: 'Scenario Simulator', description: 'Phase 7 - failure simulation, AI mitigation strategies, alternative-supplier recommendations, business impact, and recovery planning. Every endpoint explicitly labels output as real-data-derived or AI-estimated - never blended silently.' },
     ],
     components: {
       securitySchemes: {
