@@ -24,6 +24,7 @@ const COMPLETENESS_STYLE = {
 export default function ScenarioSimulatorPanel({
   simulation, onRunSimulation, simulating, simulationError,
   mitigation, onGenerateMitigation, mitigating, mitigationError,
+  alternatives, onFindAlternatives, findingAlternatives, alternativesError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -133,6 +134,42 @@ export default function ScenarioSimulatorPanel({
               </>
             ) : (
               <p className="m-0 text-slate-600 text-[0.85rem]">Generate AI-suggested mitigation strategies based on this supplier's real profile above.</p>
+            )}
+          </Card>
+
+          <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="m-0 font-semibold text-slate-800">Alternative suppliers</p>
+              <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onFindAlternatives} loading={findingAlternatives} loadingText="Searching...">
+                {alternatives ? 'Re-check' : 'Find alternatives'}
+              </Button>
+            </div>
+            {alternativesError ? <p className="m-0 text-red-700 text-[0.85rem]">{alternativesError}</p> : null}
+            {alternatives ? (
+              alternatives.status === 'no_alternatives_found' ? (
+                <>
+                  <Badge className={realBadgeClass}>Real data - honest result</Badge>
+                  <p className="m-0 text-slate-600 text-[0.85rem]">{alternatives.message}</p>
+                </>
+              ) : (
+                <>
+                  <Badge className={realBadgeClass}>Real data</Badge>
+                  <p className="m-0 text-slate-600 text-[0.85rem]">{alternatives.message}</p>
+                  <div className="grid gap-2">
+                    {alternatives.alternatives.map((alt) => (
+                      <div key={alt.supplierId} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white/80 border border-slate-300/50">
+                        <div>
+                          <p className="m-0 font-semibold text-slate-900 text-[0.9rem]">{alt.name}</p>
+                          <p className="m-0 text-slate-500 text-[0.78rem]">{alt.category} | {alt.country} | compared on: {alt.comparedOn.join(', ')}</p>
+                        </div>
+                        <Badge className="px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.8rem]">Score {alt.similarityScore}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            ) : (
+              <p className="m-0 text-slate-600 text-[0.85rem]">Check for alternative suppliers already in your org that could replace this one.</p>
             )}
           </Card>
         </>

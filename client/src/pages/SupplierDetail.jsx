@@ -88,6 +88,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [mitigating, setMitigating] = useState(false);
   const [mitigationError, setMitigationError] = useState('');
 
+  const [alternatives, setAlternatives] = useState(null);
+  const [findingAlternatives, setFindingAlternatives] = useState(false);
+  const [alternativesError, setAlternativesError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -252,6 +256,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setMitigationError(requestError?.response?.data?.error?.message || 'Unable to generate mitigation strategies.');
     } finally {
       setMitigating(false);
+    }
+  };
+
+  const handleFindAlternatives = async () => {
+    setFindingAlternatives(true);
+    setAlternativesError('');
+    try {
+      const response = await api.get(`/suppliers/${supplierId}/alternatives`);
+      setAlternatives(response.data.data);
+    } catch (requestError) {
+      setAlternativesError(requestError?.response?.data?.error?.message || 'Unable to find alternative suppliers.');
+    } finally {
+      setFindingAlternatives(false);
     }
   };
 
@@ -528,6 +545,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onGenerateMitigation={handleGenerateMitigation}
             mitigating={mitigating}
             mitigationError={mitigationError}
+            alternatives={alternatives}
+            onFindAlternatives={handleFindAlternatives}
+            findingAlternatives={findingAlternatives}
+            alternativesError={alternativesError}
           />
         </section>
 
