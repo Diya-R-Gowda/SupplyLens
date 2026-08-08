@@ -20,6 +20,7 @@ const { analyzeLegalDocuments } = require('../services/legalAgentService');
 const { analyzeFinance } = require('../services/financeAgentService');
 const { analyzeEsg } = require('../services/esgAgentService');
 const { analyzeLogistics } = require('../services/logisticsAgentService');
+const { generateManagerSummary } = require('../services/managerAgentService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -2132,6 +2133,65 @@ router.post('/:id/agents/logistics', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const analysis = await analyzeLogistics(supplier);
   return sendSuccess(res, analysis);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/manager-summary:
+ *   post:
+ *     summary: Phase 8 Step 5 - Manager Agent, an executive summary synthesizing all four other agents via context-passing
+ *     description: >
+ *       "Agent Collaboration" per the audit's recommendation - each of the Risk Analyst, Legal,
+ *       Finance, ESG, and Logistics agents is run fresh (never cached) and its real output is passed
+ *       as context into one final Gemini prompt, the same context-passing pattern already proven in
+ *       Phase 7's mitigation-strategies and recovery-estimate endpoints. Compared explicitly against
+ *       the Phase 4 Digital Twin: Twin structures the same underlying real data as JSON; this produces
+ *       a written narrative synthesis, which nothing else in this app currently does. The response's
+ *       `inputs` block states each underlying agent's real nature (genuine synthesis, genuine
+ *       extraction, real-math-or-estimate-plus-hardcoded-abstention, or focused-lens restatement) in
+ *       code, independent of the prose, so the executive summary can never overstate the depth of the
+ *       weaker inputs without it being independently checkable. Not available in demo mode.
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Executive summary, top priorities, and an honesty-labeled breakdown of the five underlying agent inputs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/manager-summary', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The Manager agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const summary = await generateManagerSummary(supplier);
+  return sendSuccess(res, summary);
 }));
 
 module.exports = router;
