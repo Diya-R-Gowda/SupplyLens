@@ -14,6 +14,7 @@ const { simulateSupplierFailure } = require('../services/simulationService');
 const { generateMitigationStrategies } = require('../services/mitigationService');
 const { findAlternativeSuppliers } = require('../services/similarityService');
 const { computeBusinessImpact } = require('../services/businessImpactService');
+const { estimateRecoveryTime } = require('../services/recoveryPlanningService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1783,6 +1784,63 @@ router.get('/:id/business-impact', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const impact = await computeBusinessImpact(supplier);
   return sendSuccess(res, impact);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/recovery-estimate:
+ *   get:
+ *     summary: Phase 7 Step 5 - AI-estimated recovery time range if this supplier failed
+ *     description: >
+ *       The lowest-grounded of the five Phase 7 items - no document-processing-duration field or
+ *       historical time-to-replace-a-supplier data exists anywhere in this app, so this is
+ *       necessarily an AI-estimated RANGE (e.g. "2 weeks - 6 weeks"), never a precise calculated
+ *       figure. Re-runs Step 1's failure simulation server-side for real context (concentration
+ *       risk, contract status, data completeness), same as Step 2's mitigation strategies. Labeled
+ *       `"AI-estimated range - not a calculation"` - this label is permanent, not conditional on
+ *       data availability the way Steps 1/3/4 are. Not available in demo mode.
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: AI-estimated recovery time range with reasoning and confidence
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/recovery-estimate', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Recovery estimate is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const simulation = await simulateSupplierFailure(supplier);
+  const estimate = await estimateRecoveryTime(simulation);
+  return sendSuccess(res, estimate);
 }));
 
 module.exports = router;
