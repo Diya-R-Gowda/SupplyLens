@@ -92,6 +92,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [findingAlternatives, setFindingAlternatives] = useState(false);
   const [alternativesError, setAlternativesError] = useState('');
 
+  const [businessFieldsForm, setBusinessFieldsForm] = useState({
+    contractValueAmount: '', contractValueCurrency: '', estimatedAnnualSpend: '', criticalityRating: '', dependencyNotes: '',
+  });
+  const [savingBusinessFields, setSavingBusinessFields] = useState(false);
+  const [businessFieldsError, setBusinessFieldsError] = useState('');
+  const [businessImpact, setBusinessImpact] = useState(null);
+  const [businessImpactLoading, setBusinessImpactLoading] = useState(false);
+  const [businessImpactError, setBusinessImpactError] = useState('');
+
+  const [recoveryEstimate, setRecoveryEstimate] = useState(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -269,6 +282,63 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setAlternativesError(requestError?.response?.data?.error?.message || 'Unable to find alternative suppliers.');
     } finally {
       setFindingAlternatives(false);
+    }
+  };
+
+  const handleBusinessFieldChange = (field) => (event) => {
+    setBusinessFieldsForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleSaveBusinessFields = async () => {
+    setSavingBusinessFields(true);
+    setBusinessFieldsError('');
+    try {
+      const payload = { dependencyNotes: businessFieldsForm.dependencyNotes };
+      if (businessFieldsForm.contractValueAmount !== '') {
+        payload.contractValue = {
+          amount: Number(businessFieldsForm.contractValueAmount),
+          currency: businessFieldsForm.contractValueCurrency || 'USD',
+        };
+      }
+      if (businessFieldsForm.estimatedAnnualSpend !== '') {
+        payload.estimatedAnnualSpend = Number(businessFieldsForm.estimatedAnnualSpend);
+      }
+      if (businessFieldsForm.criticalityRating !== '') {
+        payload.criticalityRating = Number(businessFieldsForm.criticalityRating);
+      }
+      await api.patch(`/suppliers/${supplierId}/business-fields`, payload);
+    } catch (requestError) {
+      const details = requestError?.response?.data?.error?.details;
+      const firstDetail = details && Object.values(details)[0];
+      setBusinessFieldsError(firstDetail || requestError?.response?.data?.error?.message || 'Unable to save business fields.');
+    } finally {
+      setSavingBusinessFields(false);
+    }
+  };
+
+  const handleCheckBusinessImpact = async () => {
+    setBusinessImpactLoading(true);
+    setBusinessImpactError('');
+    try {
+      const response = await api.get(`/suppliers/${supplierId}/business-impact`);
+      setBusinessImpact(response.data.data);
+    } catch (requestError) {
+      setBusinessImpactError(requestError?.response?.data?.error?.message || 'Unable to compute business impact.');
+    } finally {
+      setBusinessImpactLoading(false);
+    }
+  };
+
+  const handleGetRecoveryEstimate = async () => {
+    setRecoveryLoading(true);
+    setRecoveryError('');
+    try {
+      const response = await api.get(`/suppliers/${supplierId}/recovery-estimate`);
+      setRecoveryEstimate(response.data.data);
+    } catch (requestError) {
+      setRecoveryError(requestError?.response?.data?.error?.message || 'Unable to estimate recovery time.');
+    } finally {
+      setRecoveryLoading(false);
     }
   };
 
@@ -549,6 +619,20 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onFindAlternatives={handleFindAlternatives}
             findingAlternatives={findingAlternatives}
             alternativesError={alternativesError}
+            isAdmin={isAdmin}
+            businessFieldsForm={businessFieldsForm}
+            onBusinessFieldChange={handleBusinessFieldChange}
+            onSaveBusinessFields={handleSaveBusinessFields}
+            savingBusinessFields={savingBusinessFields}
+            businessFieldsError={businessFieldsError}
+            businessImpact={businessImpact}
+            onCheckBusinessImpact={handleCheckBusinessImpact}
+            businessImpactLoading={businessImpactLoading}
+            businessImpactError={businessImpactError}
+            recoveryEstimate={recoveryEstimate}
+            onGetRecoveryEstimate={handleGetRecoveryEstimate}
+            recoveryLoading={recoveryLoading}
+            recoveryError={recoveryError}
           />
         </section>
 

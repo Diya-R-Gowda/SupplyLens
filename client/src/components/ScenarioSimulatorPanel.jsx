@@ -1,6 +1,7 @@
 import Card from './Card';
 import Badge from './Badge';
 import Button from './Button';
+import Input from './Input';
 
 const factorBadgeClass = 'px-2.5 py-1 bg-slate-200 text-slate-700 text-[0.85rem]';
 const aiBadgeClass = 'px-2.5 py-1 bg-amber-100 text-amber-800 text-[0.78rem] uppercase tracking-[0.08em]';
@@ -21,10 +22,17 @@ const COMPLETENESS_STYLE = {
 // "AI-generated - verify independently" badge convention already established
 // for enrichment/ESG/logistics; every real-data section is labeled Real data
 // so the two are never visually ambiguous.
+const bizInputClass = 'border border-slate-300 rounded-lg px-2.5 py-2 text-[0.88rem] bg-white/92';
+const bizLabelClass = 'grid gap-1 text-[0.82rem] font-semibold text-slate-700';
+
 export default function ScenarioSimulatorPanel({
   simulation, onRunSimulation, simulating, simulationError,
   mitigation, onGenerateMitigation, mitigating, mitigationError,
   alternatives, onFindAlternatives, findingAlternatives, alternativesError,
+  isAdmin,
+  businessFieldsForm, onBusinessFieldChange, onSaveBusinessFields, savingBusinessFields, businessFieldsError,
+  businessImpact, onCheckBusinessImpact, businessImpactLoading, businessImpactError,
+  recoveryEstimate, onGetRecoveryEstimate, recoveryLoading, recoveryError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -176,6 +184,124 @@ export default function ScenarioSimulatorPanel({
       ) : (
         <p className="m-0 text-slate-600">Run a simulation to see what losing this supplier would mean, based on real data on file.</p>
       )}
+
+      <Card className="grid gap-3 p-4 rounded-2xl bg-white/72">
+        <p className="m-0 font-semibold text-slate-800">Business impact</p>
+
+        {isAdmin ? (
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className={bizLabelClass}>
+              Contract value
+              <div className="flex gap-1.5">
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={businessFieldsForm.contractValueAmount}
+                  onChange={onBusinessFieldChange('contractValueAmount')}
+                  className={`${bizInputClass} flex-1`}
+                  placeholder="e.g. 250000"
+                />
+                <Input
+                  value={businessFieldsForm.contractValueCurrency}
+                  onChange={onBusinessFieldChange('contractValueCurrency')}
+                  className={`${bizInputClass} w-16`}
+                  placeholder="USD"
+                  maxLength={3}
+                />
+              </div>
+            </label>
+            <Input
+              label="Estimated annual spend"
+              labelClassName={bizLabelClass}
+              type="number" min="0" step="0.01"
+              value={businessFieldsForm.estimatedAnnualSpend}
+              onChange={onBusinessFieldChange('estimatedAnnualSpend')}
+              className={bizInputClass}
+              placeholder="e.g. 80000"
+            />
+            <label className={bizLabelClass}>
+              Criticality (1-5)
+              <select
+                value={businessFieldsForm.criticalityRating}
+                onChange={onBusinessFieldChange('criticalityRating')}
+                className={bizInputClass}
+              >
+                <option value="">(not set)</option>
+                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <Input
+              label="Dependency notes"
+              labelClassName={bizLabelClass}
+              value={businessFieldsForm.dependencyNotes}
+              onChange={onBusinessFieldChange('dependencyNotes')}
+              className={bizInputClass}
+              maxLength={500}
+            />
+            <div className="col-span-2 flex items-center gap-2.5">
+              <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onSaveBusinessFields} loading={savingBusinessFields} loadingText="Saving...">
+                Save real values
+              </Button>
+              {businessFieldsError ? <p className="m-0 text-red-700 text-[0.82rem]">{businessFieldsError}</p> : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 text-slate-600 text-[0.85rem]">Real values above compute directly; left blank, Gemini provides a labeled estimate.</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onCheckBusinessImpact} loading={businessImpactLoading} loadingText="Checking...">
+            Check impact
+          </Button>
+        </div>
+        {businessImpactError ? <p className="m-0 text-red-700 text-[0.85rem]">{businessImpactError}</p> : null}
+        {businessImpact ? (
+          businessImpact.mode === 'real' ? (
+            <>
+              <Badge className={realBadgeClass}>Real calculation</Badge>
+              <p className="m-0 text-slate-900 text-[0.9rem]">{businessImpact.summary}</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={estimateBadgeClass}>{businessImpact.label}</Badge>
+                {typeof businessImpact.confidence === 'number' ? (
+                  <Badge className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[0.75rem]">Confidence {Math.round(businessImpact.confidence * 100)}%</Badge>
+                ) : null}
+              </div>
+              {businessImpact.estimatedAnnualSpendRange ? (
+                <p className="m-0 text-slate-900 text-[0.9rem]">
+                  Estimated annual spend: {businessImpact.estimatedAnnualSpendRange.low.toLocaleString()} - {businessImpact.estimatedAnnualSpendRange.high.toLocaleString()} {businessImpact.estimatedAnnualSpendRange.currency}
+                  {businessImpact.criticalityRating ? ` | Estimated criticality: ${businessImpact.criticalityRating}/5` : ''}
+                </p>
+              ) : (
+                <p className="m-0 text-slate-600 text-[0.9rem]">Gemini had no reasonable basis to estimate spend for this supplier.</p>
+              )}
+              {businessImpact.reasoning ? <p className="m-0 text-slate-600 text-[0.85rem]">{businessImpact.reasoning}</p> : null}
+            </>
+          )
+        ) : null}
+      </Card>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">Recovery planning</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onGetRecoveryEstimate} loading={recoveryLoading} loadingText="Estimating...">
+            {recoveryEstimate ? 'Regenerate' : 'Estimate recovery time'}
+          </Button>
+        </div>
+        {recoveryError ? <p className="m-0 text-red-700 text-[0.85rem]">{recoveryError}</p> : null}
+        {recoveryEstimate ? (
+          <>
+            <Badge className={estimateBadgeClass}>AI-estimated range - not a calculation</Badge>
+            <p className="m-0 text-slate-900 text-[0.95rem] font-semibold">{recoveryEstimate.estimatedRange}</p>
+            <p className="m-0 text-slate-600 text-[0.85rem]">{recoveryEstimate.reasoning}</p>
+            {typeof recoveryEstimate.confidence === 'number' ? (
+              <Badge className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[0.75rem] w-fit">Confidence {Math.round(recoveryEstimate.confidence * 100)}%</Badge>
+            ) : null}
+          </>
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">Get an AI-estimated range for how long recovery might take if this supplier failed - always a range, never a precise figure.</p>
+        )}
+      </Card>
     </div>
   );
 }
