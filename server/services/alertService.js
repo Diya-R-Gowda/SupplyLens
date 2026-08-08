@@ -42,3 +42,50 @@ exports.isNewBreach = (previousScore, newScore, threshold, direction) => {
   const isBreached = direction === 'above' ? newScore >= threshold : newScore <= threshold;
   return isBreached && !wasBreached;
 };
+
+// Early Warning (Phase 6 Step 3) - "projected to cross the threshold if the
+// trend continues," as distinct from evaluateAlerts' "has already crossed
+// it." Depends entirely on forecastService's insufficient_data gating: a
+// metric whose forecast.status isn't 'ok' contributes zero projected
+// breaches, full stop - there is no fallback number, because a guessed
+// early warning built on data too thin to forecast from would be exactly
+// the false-confidence problem this whole phase exists to avoid (see
+// forecastService.js and TODO.md).
+//
+// A metric that's ALREADY breaching right now is deliberately excluded from
+// its own projected-breach list - evaluateAlerts already covers "this is a
+// problem today"; projecting forward from an already-bad number and
+// reporting it as a fresh "early warning" would be misleading (the warning
+// already happened).
+exports.evaluateProjectedBreach = (supplier, forecast, thresholds) => {
+  if (!thresholds?.enabled || !forecast) return { risk: [], health: [] };
+
+  const riskAlreadyBreached = supplier.riskScore >= thresholds.riskThreshold;
+  const healthAlreadyBreached = supplier.healthScore <= thresholds.healthThreshold;
+
+  const risk = (!riskAlreadyBreached && forecast.risk?.status === 'ok')
+    ? forecast.risk.projections
+      .filter((p) => p.projectedScore >= thresholds.riskThreshold)
+      .map((p) => ({
+        horizonDays: p.horizonDays,
+        projectedScore: p.projectedScore,
+        threshold: thresholds.riskThreshold,
+        confidenceInterval: p.confidenceInterval,
+        confidenceLevel: forecast.risk.dataQuality.confidenceLevel,
+      }))
+    : [];
+
+  const health = (!healthAlreadyBreached && forecast.health?.status === 'ok')
+    ? forecast.health.projections
+      .filter((p) => p.projectedScore <= thresholds.healthThreshold)
+      .map((p) => ({
+        horizonDays: p.horizonDays,
+        projectedScore: p.projectedScore,
+        threshold: thresholds.healthThreshold,
+        confidenceInterval: p.confidenceInterval,
+        confidenceLevel: forecast.health.dataQuality.confidenceLevel,
+      }))
+    : [];
+
+  return { risk, health };
+};
