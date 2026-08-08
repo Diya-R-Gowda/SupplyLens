@@ -27,6 +27,7 @@ const options = {
       { name: 'News', description: 'Cached news/sentiment items for a supplier.' },
       { name: 'RAG', description: 'Ask questions about a supplier\'s ingested contract documents.' },
       { name: 'Config', description: 'Per-org configurable risk/health scoring weights and alert thresholds.' },
+      { name: 'Forecasting', description: 'Phase 6 - hand-rolled linear-regression forecasts (per-supplier and portfolio-level), gated on real data sufficiency.' },
     ],
     components: {
       securitySchemes: {

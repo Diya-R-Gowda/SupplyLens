@@ -9,6 +9,7 @@ const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
 const { deleteSupplierCascade } = require('../services/supplierCascadeService');
+const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1403,6 +1404,56 @@ router.get('/:id/risk-health-history', auth, asyncHandler(async (req, res) => {
   const [risk, health] = await Promise.all([fetchSeries(RiskHistory), fetchSeries(HealthHistory)]);
 
   return sendSuccess(res, { risk, health });
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/forecast:
+ *   get:
+ *     summary: Hand-rolled linear-regression risk/health forecast for a supplier
+ *     description: >
+ *       Fits a straight line through this supplier's real RiskHistory/HealthHistory rows and
+ *       projects it 7 and 30 days out, with a confidence interval that widens for fewer points and
+ *       longer horizons. Below a minimum point count (5) or minimum real time spread (24h total
+ *       span - guards against a burst of same-instant test-script rows counting as real history),
+ *       `status` is `insufficient_data` and no projection is returned at all - this is expected to
+ *       be the common case today, not an edge case (see the Phase 6 audit in CONTRIBUTING.md). Not
+ *       available in demo mode.
+ *     tags: [Forecasting]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Forecast (or an explicit insufficient_data result) for both risk and health
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *             example:
+ *               success: true
+ *               data:
+ *                 risk: { status: insufficient_data, dataQuality: { pointCount: 2, spanHours: 0.03, minPointsRequired: 5, minSpanHoursRequired: 24, reason: too_few_points }, projections: [] }
+ *                 health: { status: insufficient_data, dataQuality: { pointCount: 0, spanHours: 0, minPointsRequired: 5, minSpanHoursRequired: 24, reason: no_history }, projections: [] }
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/forecast', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    const insufficient = { status: 'insufficient_data', dataQuality: { pointCount: 0, spanHours: 0, minPointsRequired: 5, minSpanHoursRequired: 24, reason: 'no_history' }, projections: [] };
+    return sendSuccess(res, { risk: insufficient, health: insufficient });
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const forecast = await getSupplierForecast(supplier);
+  return sendSuccess(res, forecast);
 }));
 
 module.exports = router;
