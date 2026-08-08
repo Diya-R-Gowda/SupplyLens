@@ -1006,7 +1006,13 @@ router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
  *       object (Phase 6 Step 3, Early Warning) lists any future horizon (7/30 days) where this
  *       supplier's own forecast crosses the same thresholds - empty unless that supplier has enough
  *       real, time-spread history to forecast from (see GET /suppliers/{id}/forecast) and excludes
- *       any metric already breaching today (that's `alerts`' job, not a "fresh" warning).
+ *       any metric already breaching today (that's `alerts`' job, not a "fresh" warning). An
+ *       `anomalies` object (Phase 6 Step 4) reports two independently-gated detectors:
+ *       `compoundingDrift` (several individually-small score changes over a rolling 14-day window
+ *       adding up to something significant even though no single change tripped Phase 5's own
+ *       cap) and `sentimentShift` (a recent worsening in news sentiment, hard-capped at 7 days to
+ *       match NewsCache's own TTL). Both report `status: insufficient_data` rather than a guess
+ *       below their own minimum real-data thresholds.
  *       Computed on every read from current data (not persisted) - the same precedent as the
  *       timeline endpoint, so it's always fresh by construction. See
  *       `GET /suppliers/{id}/timeline` for the equivalent chronological history view, and

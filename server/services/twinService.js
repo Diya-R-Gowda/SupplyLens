@@ -5,6 +5,7 @@ const { getOrgWeights, getOrgAlertThresholds } = require('./riskConfigService');
 const { buildNarrativesForHistory } = require('./narrativeService');
 const { evaluateAlerts, evaluateProjectedBreach } = require('./alertService');
 const { getSupplierForecast } = require('./predictiveAnalyticsService');
+const { detectAnomalies } = require('./anomalyService');
 
 // Synthesizes a "what is true about this supplier right now" profile -
 // the Digital Twin - from the same underlying collections the timeline
@@ -23,6 +24,9 @@ exports.buildSupplierTwin = async (supplier) => {
   // other twin field.
   const forecast = await getSupplierForecast(supplier);
   const projectedAlerts = evaluateProjectedBreach(supplier, forecast, alertThresholds);
+  // Anomaly Detection (Phase 6 Step 4) - compounding drift + sentiment
+  // pattern-shift, same compute-on-read precedent as everything else here.
+  const anomalies = await detectAnomalies(supplier);
 
   const factors = await computeFactors(supplier);
   const healthFactors = await computeHealthFactors(supplier);
@@ -130,6 +134,7 @@ exports.buildSupplierTwin = async (supplier) => {
     },
     alerts,
     projectedAlerts,
+    anomalies,
     generatedAt: new Date(),
   };
 };

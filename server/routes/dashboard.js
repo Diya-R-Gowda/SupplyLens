@@ -8,6 +8,7 @@ const { listDemoSuppliers } = require('../services/demoStore');
 const { getOrgAlertThresholds } = require('../services/riskConfigService');
 const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
 const { evaluateProjectedBreach } = require('../services/alertService');
+const { detectAnomalies } = require('../services/anomalyService');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 
@@ -96,6 +97,7 @@ const computeStatsFromList = (suppliers) => {
     worseningHealth: [],
     activeAlerts: [],
     projectedActiveAlerts: [],
+    anomalyAlerts: [],
   };
 };
 
@@ -116,7 +118,10 @@ const computeStatsFromList = (suppliers) => {
  *       projectedActiveAlerts (Phase 6 Step 3, Early Warning) is up to 10 suppliers NOT currently
  *       breaching but forecast to cross a threshold at a future horizon - empty for any supplier
  *       without enough real history to forecast from (see GET /suppliers/{id}/forecast), which is
- *       the expected common case today. None of these three are available in demo mode (all always empty).
+ *       the expected common case today. anomalyAlerts (Phase 6 Step 4) is up to 10 suppliers with a
+ *       detected compounding-delta drift or news-sentiment shift - same insufficient_data gating,
+ *       computed in the same pass as projectedActiveAlerts so each candidate supplier's forecast is
+ *       only fetched once. None of these four are available in demo mode (all always empty).
  *     tags: [Dashboard]
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -259,18 +264,17 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
       })))
     : [];
 
-  // Early Warning (Phase 6 Step 3), portfolio-wide: which suppliers NOT
-  // already breaching today are forecast to cross a threshold at some
-  // future horizon. Deliberately excludes suppliers already in
-  // `activeAlerts` above (evaluateProjectedBreach also excludes per-metric,
-  // but the query-level exclusion here avoids computing a forecast at all
-  // for a supplier that's already a reactive alert). Compute-on-read per
+  // Early Warning (Phase 6 Step 3) + Anomaly Detection (Phase 6 Step 4),
+  // portfolio-wide, computed together in one pass over the same candidate
+  // suppliers (not already breaching today) so each supplier's forecast is
+  // fetched once, not twice across two separate scans. Compute-on-read per
   // supplier like every other twin-shaped field in this app (Digital Twin,
   // timeline) - unbenchmarked at real scale, same caveat as those (see
-  // TODO.md); fine at current volumes. Capped at 10, same rollup-not-full-
-  // list precedent as activeAlerts.
+  // TODO.md); fine at current volumes. Both capped at 10, same rollup-not-
+  // full-list precedent as activeAlerts.
   const activeAlertIds = new Set(activeAlerts.map((a) => String(a.supplierId)));
   let projectedActiveAlerts = [];
+  let anomalyAlerts = [];
   if (alertThresholds.enabled) {
     const candidates = await Supplier.find({
       orgId: req.user.orgId,
@@ -278,19 +282,37 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     }).lean();
 
     const evaluated = await Promise.all(candidates.map(async (supplierDoc) => {
-      const forecast = await getSupplierForecast(supplierDoc);
+      const [forecast, anomalies] = await Promise.all([
+        getSupplierForecast(supplierDoc),
+        detectAnomalies(supplierDoc),
+      ]);
       const projected = evaluateProjectedBreach(supplierDoc, forecast, alertThresholds);
-      if (projected.risk.length === 0 && projected.health.length === 0) return null;
-      return {
+
+      const projectedEntry = (projected.risk.length || projected.health.length) ? {
         supplierId: supplierDoc._id,
         name: supplierDoc.name,
         riskScore: supplierDoc.riskScore,
         healthScore: supplierDoc.healthScore,
         projectedRiskBreach: projected.risk[0] || null,
         projectedHealthBreach: projected.health[0] || null,
-      };
+      } : null;
+
+      const riskDrift = anomalies.compoundingDrift.risk.status === 'ok' && anomalies.compoundingDrift.risk.detected ? anomalies.compoundingDrift.risk : null;
+      const healthDrift = anomalies.compoundingDrift.health.status === 'ok' && anomalies.compoundingDrift.health.detected ? anomalies.compoundingDrift.health : null;
+      const sentiment = anomalies.sentimentShift.status === 'ok' && anomalies.sentimentShift.detected ? anomalies.sentimentShift : null;
+      const anomalyEntry = (riskDrift || healthDrift || sentiment) ? {
+        supplierId: supplierDoc._id,
+        name: supplierDoc.name,
+        compoundingRiskDrift: riskDrift,
+        compoundingHealthDrift: healthDrift,
+        sentimentShift: sentiment,
+      } : null;
+
+      return { projectedEntry, anomalyEntry };
     }));
-    projectedActiveAlerts = evaluated.filter(Boolean).slice(0, 10);
+
+    projectedActiveAlerts = evaluated.map((e) => e.projectedEntry).filter(Boolean).slice(0, 10);
+    anomalyAlerts = evaluated.map((e) => e.anomalyEntry).filter(Boolean).slice(0, 10);
   }
 
   return sendSuccess(res, {
@@ -307,6 +329,7 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     worseningHealth: worseningHealthRaw,
     activeAlerts,
     projectedActiveAlerts,
+    anomalyAlerts,
   });
 }));
 
