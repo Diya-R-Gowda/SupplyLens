@@ -5,6 +5,7 @@ import SupplierDetail from './SupplierDetail';
 import Button from '../components/Button';
 import DashboardOverview from '../components/DashboardOverview';
 import RiskConfigPanel from '../components/RiskConfigPanel';
+import ForecastPanel from '../components/ForecastPanel';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -36,6 +37,8 @@ export default function Dashboard({ user, onLogout }) {
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState('');
 
+  const [forecast, setForecast] = useState(null);
+
   useEffect(() => {
     let active = true;
 
@@ -63,6 +66,7 @@ export default function Dashboard({ user, onLogout }) {
     };
 
     loadStats();
+    api.get('/org/forecast').then((res) => { if (active) setForecast(res.data.data); }).catch(() => { if (active) setForecast(null); });
 
     return () => {
       active = false;
@@ -155,6 +159,12 @@ export default function Dashboard({ user, onLogout }) {
           </div>
 
           <DashboardOverview stats={stats} loading={statsLoading} error={statsError} onOpenSupplier={setSelectedSupplier} />
+
+          <ForecastPanel
+            title="Portfolio risk & health forecast"
+            subtitle="Pooled across every supplier's snapshot history in your org - a hand-rolled linear projection, not a guarantee. Shown honestly as insufficient today wherever it is."
+            forecast={forecast}
+          />
 
           <div className="flex flex-wrap gap-2.5">
             <input

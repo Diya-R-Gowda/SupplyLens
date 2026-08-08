@@ -19,9 +19,13 @@ exports.getSupplierForecast = async (supplier) => {
     supplierPoints(HealthHistory, supplier._id),
   ]);
 
+  // `historical` echoes back the exact points the forecast (if any) was fit
+  // from, in the same {timestamp, score} shape the portfolio endpoint uses
+  // for its own historical field - lets the frontend's forecast chart use
+  // one shared component for both views instead of branching on shape.
   return {
-    risk: forecastFromPoints(riskPoints),
-    health: forecastFromPoints(healthPoints),
+    risk: { ...forecastFromPoints(riskPoints), historical: riskPoints },
+    health: { ...forecastFromPoints(healthPoints), historical: healthPoints },
   };
 };
 
@@ -81,9 +85,12 @@ const portfolioDailySeries = async (orgId, scoreField) => {
     { $sort: { _id: 1 } },
   ]);
 
+  // Same {timestamp, score} shape as supplierPoints' historical field above
+  // (plus sampleCount, portfolio-only) - a shared shape means the frontend
+  // forecast chart doesn't need to branch on which endpoint it came from.
   return rows.map((row) => ({
-    date: row._id,
-    avgScore: Math.round(row.avgScore * 10) / 10,
+    timestamp: new Date(`${row._id}T00:00:00.000Z`),
+    score: Math.round(row.avgScore * 10) / 10,
     sampleCount: row.sampleCount,
   }));
 };
