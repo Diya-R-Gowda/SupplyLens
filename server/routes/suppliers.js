@@ -18,6 +18,8 @@ const { estimateRecoveryTime } = require('../services/recoveryPlanningService');
 const { analyzeRisk } = require('../services/riskAnalystAgentService');
 const { analyzeLegalDocuments } = require('../services/legalAgentService');
 const { analyzeFinance } = require('../services/financeAgentService');
+const { analyzeEsg } = require('../services/esgAgentService');
+const { analyzeLogistics } = require('../services/logisticsAgentService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -2020,6 +2022,115 @@ router.post('/:id/agents/finance', auth, asyncHandler(async (req, res) => {
 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const analysis = await analyzeFinance(supplier);
+  return sendSuccess(res, analysis);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/esg:
+ *   post:
+ *     summary: Phase 8 Step 4 - ESG Agent, a focused-lens view of existing Phase 4 ESG data (NOT independent analysis)
+ *     description: >
+ *       Per the audit, this is explicitly NOT independent analysis - it reuses `enrichEsgData()`
+ *       as-is (only calling it if this supplier's ESG data has genuinely never been fetched) rather
+ *       than duplicating a near-identical Gemini prompt under a new persona label. The only addition
+ *       is a deterministic (no extra Gemini call) note on which of environmental/social/governance is
+ *       the weakest score. Always labeled "Based on Phase 4 enrichment data - not independent
+ *       analysis" in the response. Not available in demo mode.
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: ESG data (existing or freshly fetched) plus a deterministic focused-lens summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response (only if ESG data had to be freshly fetched) - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/esg', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The ESG agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const analysis = await analyzeEsg(supplier);
+  return sendSuccess(res, analysis);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/logistics:
+ *   post:
+ *     summary: Phase 8 Step 4 - Logistics Agent, a focused-lens view of existing Phase 4 logistics data (NOT independent analysis)
+ *     description: >
+ *       Same design and honesty rationale as the ESG agent above - reuses `enrichLogisticsData()`
+ *       as-is, only calling it fresh if never fetched. The only addition is a deterministic threshold
+ *       read on on-time-delivery-rate (below/above 80%, generally considered reliable). Always
+ *       labeled "Based on Phase 4 enrichment data - not independent analysis". Not available in demo
+ *       mode.
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Logistics data (existing or freshly fetched) plus a deterministic focused-lens summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response (only if logistics data had to be freshly fetched) - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/logistics', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The Logistics agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const analysis = await analyzeLogistics(supplier);
   return sendSuccess(res, analysis);
 }));
 

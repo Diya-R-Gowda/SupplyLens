@@ -1,4 +1,5 @@
 const { enrichEsgData } = require('./enrichmentService');
+const { computeHealthScore } = require('./healthScoreService');
 
 // Phase 8 Step 4 - ESG Agent. Per the audit, this is explicitly NOT
 // independent analysis - it's a thin, honestly-labeled wrapper. Reuses
@@ -12,9 +13,23 @@ const { enrichEsgData } = require('./enrichmentService');
 // naming which of environmental/social/governance is the weakest score,
 // since the raw fields alone don't say which dimension is the more
 // actionable risk lever - that's the entire "focused lens" this agent adds.
+//
+// Found live during development: the fallback fetch must PERSIST exactly
+// like /esg-refresh does (supplier.esg = esg; save(); recompute Health
+// Score) - without this, every call re-fetches from Gemini (since the
+// supplier document in the DB never actually changes), burning quota
+// pointlessly and never converging to freshlyFetched: false the way "ensure
+// real data exists, don't duplicate the call" was supposed to mean.
 exports.analyzeEsg = async (supplier) => {
-  const esg = supplier.esg?.refreshedAt ? supplier.esg : await enrichEsgData(supplier.name);
   const freshlyFetched = !supplier.esg?.refreshedAt;
+  let esg = supplier.esg;
+
+  if (freshlyFetched) {
+    esg = await enrichEsgData(supplier.name);
+    supplier.esg = esg;
+    await supplier.save();
+    await computeHealthScore(supplier, 'esg_update');
+  }
 
   const scores = {
     environmental: esg.environmentalScore,

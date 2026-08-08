@@ -25,6 +25,8 @@ export default function AgentsPanel({
   riskAnalyst, onRunRiskAnalyst, riskAnalystLoading, riskAnalystError,
   legal, onRunLegal, legalLoading, legalError,
   finance, onRunFinance, financeLoading, financeError,
+  esg, onRunEsg, esgLoading, esgError,
+  logisticsAgent, onRunLogisticsAgent, logisticsAgentLoading, logisticsAgentError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -153,6 +155,53 @@ export default function AgentsPanel({
           </>
         ) : (
           <p className="m-0 text-slate-600 text-[0.85rem]">Real business-impact math (or a labeled AI estimate) - payment history and invoices are always explicitly not answered, never guessed.</p>
+        )}
+      </Card>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">ESG</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onRunEsg} loading={esgLoading} loadingText="Loading...">
+            {esg ? 'Re-run' : 'Run ESG lens'}
+          </Button>
+        </div>
+        {esgError ? <p className="m-0 text-red-700 text-[0.85rem]">{esgError}</p> : null}
+        {esg ? (
+          <>
+            <Badge className={focusedLensBadgeClass}>{esg.label}</Badge>
+            <p className="m-0 text-slate-500 text-[0.78rem]">{esg.scope}</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={factorBadgeClass}>Environmental {esg.esg.environmentalScore ?? '?'}</Badge>
+              <Badge className={factorBadgeClass}>Social {esg.esg.socialScore ?? '?'}</Badge>
+              <Badge className={factorBadgeClass}>Governance {esg.esg.governanceScore ?? '?'}</Badge>
+            </div>
+            <p className="m-0 text-slate-900 text-[0.88rem]">{esg.focusedSummary}</p>
+          </>
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">A focused restatement of this supplier's existing ESG enrichment data, naming the weakest dimension.</p>
+        )}
+      </Card>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">Logistics</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onRunLogisticsAgent} loading={logisticsAgentLoading} loadingText="Loading...">
+            {logisticsAgent ? 'Re-run' : 'Run logistics lens'}
+          </Button>
+        </div>
+        {logisticsAgentError ? <p className="m-0 text-red-700 text-[0.85rem]">{logisticsAgentError}</p> : null}
+        {logisticsAgent ? (
+          <>
+            <Badge className={focusedLensBadgeClass}>{logisticsAgent.label}</Badge>
+            <p className="m-0 text-slate-500 text-[0.78rem]">{logisticsAgent.scope}</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={factorBadgeClass}>On-time {logisticsAgent.logistics.onTimeDeliveryRate ?? '?'}%</Badge>
+              <Badge className={factorBadgeClass}>Lead time {logisticsAgent.logistics.averageLeadTimeDays ?? '?'} day(s)</Badge>
+            </div>
+            <p className="m-0 text-slate-900 text-[0.88rem]">{logisticsAgent.focusedSummary}</p>
+          </>
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">A focused restatement of this supplier's existing logistics enrichment data, flagging reliability below the 80% threshold.</p>
         )}
       </Card>
     </div>

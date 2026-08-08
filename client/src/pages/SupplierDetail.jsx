@@ -118,6 +118,14 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [financeLoading, setFinanceLoading] = useState(false);
   const [financeError, setFinanceError] = useState('');
 
+  const [esgAgent, setEsgAgent] = useState(null);
+  const [esgAgentLoading, setEsgAgentLoading] = useState(false);
+  const [esgAgentError, setEsgAgentError] = useState('');
+
+  const [logisticsAgent, setLogisticsAgent] = useState(null);
+  const [logisticsAgentLoading, setLogisticsAgentLoading] = useState(false);
+  const [logisticsAgentError, setLogisticsAgentError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -391,6 +399,32 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setFinanceError(requestError?.response?.data?.error?.message || 'Unable to run the Finance agent.');
     } finally {
       setFinanceLoading(false);
+    }
+  };
+
+  const handleRunEsgAgent = async () => {
+    setEsgAgentLoading(true);
+    setEsgAgentError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/esg`);
+      setEsgAgent(response.data.data);
+    } catch (requestError) {
+      setEsgAgentError(requestError?.response?.data?.error?.message || 'Unable to run the ESG agent.');
+    } finally {
+      setEsgAgentLoading(false);
+    }
+  };
+
+  const handleRunLogisticsAgent = async () => {
+    setLogisticsAgentLoading(true);
+    setLogisticsAgentError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/logistics`);
+      setLogisticsAgent(response.data.data);
+    } catch (requestError) {
+      setLogisticsAgentError(requestError?.response?.data?.error?.message || 'Unable to run the Logistics agent.');
+    } finally {
+      setLogisticsAgentLoading(false);
     }
   };
 
@@ -703,6 +737,14 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onRunFinance={handleRunFinance}
             financeLoading={financeLoading}
             financeError={financeError}
+            esg={esgAgent}
+            onRunEsg={handleRunEsgAgent}
+            esgLoading={esgAgentLoading}
+            esgError={esgAgentError}
+            logisticsAgent={logisticsAgent}
+            onRunLogisticsAgent={handleRunLogisticsAgent}
+            logisticsAgentLoading={logisticsAgentLoading}
+            logisticsAgentError={logisticsAgentError}
           />
         </section>
 
