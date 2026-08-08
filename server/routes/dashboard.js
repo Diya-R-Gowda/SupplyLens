@@ -6,6 +6,8 @@ const Supplier = require('../models/Supplier');
 const HealthHistory = require('../models/HealthHistory');
 const { listDemoSuppliers } = require('../services/demoStore');
 const { getOrgAlertThresholds } = require('../services/riskConfigService');
+const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
+const { evaluateProjectedBreach } = require('../services/alertService');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 
@@ -89,9 +91,11 @@ const computeStatsFromList = (suppliers) => {
     recentActivity,
     // No demo-mode HealthHistory data, same precedent as ESG/logistics/twin/
     // snapshots in Phase 4 (see TODO.md) - real-DB-only. Same for
-    // activeAlerts - RiskConfig thresholds are DB-only too.
+    // activeAlerts/projectedActiveAlerts - RiskConfig thresholds and
+    // RiskHistory/HealthHistory are DB-only too.
     worseningHealth: [],
     activeAlerts: [],
+    projectedActiveAlerts: [],
   };
 };
 
@@ -108,8 +112,11 @@ const computeStatsFromList = (suppliers) => {
  *       worseningHealth is a separate query (HealthHistory) - up to 5 suppliers whose most recent
  *       health change in the last 7 days was a decline, worst first. activeAlerts (Phase 5 Step 5)
  *       is up to 10 suppliers currently breaching the org's configured risk/health thresholds,
- *       computed fresh from each supplier's current score - empty if alerting is disabled. Neither
- *       is available in demo mode (both always empty).
+ *       computed fresh from each supplier's current score - empty if alerting is disabled.
+ *       projectedActiveAlerts (Phase 6 Step 3, Early Warning) is up to 10 suppliers NOT currently
+ *       breaching but forecast to cross a threshold at a future horizon - empty for any supplier
+ *       without enough real history to forecast from (see GET /suppliers/{id}/forecast), which is
+ *       the expected common case today. None of these three are available in demo mode (all always empty).
  *     tags: [Dashboard]
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -252,6 +259,40 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
       })))
     : [];
 
+  // Early Warning (Phase 6 Step 3), portfolio-wide: which suppliers NOT
+  // already breaching today are forecast to cross a threshold at some
+  // future horizon. Deliberately excludes suppliers already in
+  // `activeAlerts` above (evaluateProjectedBreach also excludes per-metric,
+  // but the query-level exclusion here avoids computing a forecast at all
+  // for a supplier that's already a reactive alert). Compute-on-read per
+  // supplier like every other twin-shaped field in this app (Digital Twin,
+  // timeline) - unbenchmarked at real scale, same caveat as those (see
+  // TODO.md); fine at current volumes. Capped at 10, same rollup-not-full-
+  // list precedent as activeAlerts.
+  const activeAlertIds = new Set(activeAlerts.map((a) => String(a.supplierId)));
+  let projectedActiveAlerts = [];
+  if (alertThresholds.enabled) {
+    const candidates = await Supplier.find({
+      orgId: req.user.orgId,
+      _id: { $nin: [...activeAlertIds] },
+    }).lean();
+
+    const evaluated = await Promise.all(candidates.map(async (supplierDoc) => {
+      const forecast = await getSupplierForecast(supplierDoc);
+      const projected = evaluateProjectedBreach(supplierDoc, forecast, alertThresholds);
+      if (projected.risk.length === 0 && projected.health.length === 0) return null;
+      return {
+        supplierId: supplierDoc._id,
+        name: supplierDoc.name,
+        riskScore: supplierDoc.riskScore,
+        healthScore: supplierDoc.healthScore,
+        projectedRiskBreach: projected.risk[0] || null,
+        projectedHealthBreach: projected.health[0] || null,
+      };
+    }));
+    projectedActiveAlerts = evaluated.filter(Boolean).slice(0, 10);
+  }
+
   return sendSuccess(res, {
     totalSuppliers: totals.totalSuppliers,
     averageRiskScore: totals.averageRiskScore != null ? roundToOneDecimal(totals.averageRiskScore) : 0,
@@ -265,6 +306,7 @@ router.get('/stats', auth, asyncHandler(async (req, res) => {
     recentActivity: result.recentActivity,
     worseningHealth: worseningHealthRaw,
     activeAlerts,
+    projectedActiveAlerts,
   });
 }));
 

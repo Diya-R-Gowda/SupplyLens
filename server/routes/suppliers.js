@@ -1002,7 +1002,11 @@ router.post('/:id/logistics-refresh', auth, asyncHandler(async (req, res) => {
  *       most recent upload, a news sentiment rollup and most recent headline, contract status, and
  *       an `alerts` object (Phase 5 Step 5) showing whether risk/health currently breach the org's
  *       configured thresholds (server/services/alertService.js) - also computed fresh on every
- *       read, so it's always accurate regardless of when the score last changed.
+ *       read, so it's always accurate regardless of when the score last changed. A `projectedAlerts`
+ *       object (Phase 6 Step 3, Early Warning) lists any future horizon (7/30 days) where this
+ *       supplier's own forecast crosses the same thresholds - empty unless that supplier has enough
+ *       real, time-spread history to forecast from (see GET /suppliers/{id}/forecast) and excludes
+ *       any metric already breaching today (that's `alerts`' job, not a "fresh" warning).
  *       Computed on every read from current data (not persisted) - the same precedent as the
  *       timeline endpoint, so it's always fresh by construction. See
  *       `GET /suppliers/{id}/timeline` for the equivalent chronological history view, and

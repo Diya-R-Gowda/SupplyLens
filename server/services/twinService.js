@@ -3,7 +3,8 @@ const { computeFactors } = require('./riskScoreService');
 const { computeHealthFactors } = require('./healthScoreService');
 const { getOrgWeights, getOrgAlertThresholds } = require('./riskConfigService');
 const { buildNarrativesForHistory } = require('./narrativeService');
-const { evaluateAlerts } = require('./alertService');
+const { evaluateAlerts, evaluateProjectedBreach } = require('./alertService');
+const { getSupplierForecast } = require('./predictiveAnalyticsService');
 
 // Synthesizes a "what is true about this supplier right now" profile -
 // the Digital Twin - from the same underlying collections the timeline
@@ -16,6 +17,12 @@ exports.buildSupplierTwin = async (supplier) => {
   const { risk: riskWeights, health: healthWeights } = await getOrgWeights(supplier.orgId);
   const alertThresholds = await getOrgAlertThresholds(supplier.orgId);
   const alerts = evaluateAlerts(supplier, alertThresholds);
+  // Early Warning (Phase 6 Step 3) - reuses this same forecast the
+  // /forecast endpoint would compute; not persisted or cached, so it's
+  // always evaluated against the supplier's current history like every
+  // other twin field.
+  const forecast = await getSupplierForecast(supplier);
+  const projectedAlerts = evaluateProjectedBreach(supplier, forecast, alertThresholds);
 
   const factors = await computeFactors(supplier);
   const healthFactors = await computeHealthFactors(supplier);
@@ -122,6 +129,7 @@ exports.buildSupplierTwin = async (supplier) => {
       status: contractStatus,
     },
     alerts,
+    projectedAlerts,
     generatedAt: new Date(),
   };
 };
