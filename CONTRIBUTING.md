@@ -248,11 +248,28 @@ Full pass/fail verification is in [Phase 6 Complete — End-to-End Smoke Test](#
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Supplier Failure Simulation | Simulate supplier shutdowns and disruptions. |
-| 🔴 | Business Impact Analysis | Estimate operational and financial impact of supplier failures. |
-| 🔴 | Recovery Planning | Calculate estimated recovery time after disruptions. |
-| 🔴 | Alternative Supplier Recommendations | Recommend replacement suppliers based on similarity and performance. |
-| 🔴 | AI Decision Support | Generate mitigation strategies using AI recommendations. |
+| 🔴 | Supplier Failure Simulation | Simulate supplier shutdowns and disruptions. **Pre-build audit (2026-08-08): the most groundable of the five** - buildable almost entirely from real existing data (risk/health scores, contract status, category/country concentration, document/news history), no new fields required. |
+| 🔴 | Business Impact Analysis | Estimate operational and financial impact of supplier failures. **Pre-build audit: no real grounding exists anywhere in the schema** - no contract-value, revenue/spend, order-volume, or criticality/dependency field on `Supplier`, `Document`, or any Phase 3/4 enrichment/ESG/logistics data. Blocked on a product decision (add new fields vs. ship as an explicitly-labeled AI estimate) - see `TODO.md` section 2. Does not block starting Phase 7; see the build order below. |
+| 🔴 | Recovery Planning | Calculate estimated recovery time after disruptions. **Pre-build audit: same category of gap as Business Impact Analysis** - no document-processing-duration field, no historical time-to-replace-a-supplier data anywhere. Would necessarily ship as a rough AI-estimated range, explicitly labeled as an estimate, not a calculation. |
+| 🔴 | Alternative Supplier Recommendations | Recommend replacement suppliers based on similarity and performance. **Pre-build audit: real schema fields exist (category, country, enrichment/ESG/logistics) but live data to compare across is currently empty** - every current supplier has 0% enrichment/ESG/logistics population and 0 documents. Needs the same "not enough comparable data" honesty gate Phase 6 used for insufficient history. |
+| 🔴 | AI Decision Support | Generate mitigation strategies using AI recommendations. **Pre-build audit: no data-grounding gap** - the existing prompted-JSON + self-reported-confidence pattern (`enrichmentService.js`, `sentimentService.js`) is directly reusable as-is. |
+
+> **Note (2026-08-08):** A read-only audit found this phase splits cleanly into
+> two kinds of honesty problem, not one: Supplier Failure Simulation and AI
+> Decision Support are fully groundable in real data today (recommended build
+> order: simulation first, decision support second, both need no new
+> fields); Alternative Supplier Recommendations is grounded in schema but not
+> in current live data (needs Phase 6-style "insufficient comparable data"
+> gating); Business Impact Analysis and Recovery Planning have **no real
+> grounding at all** and are blocked on a product decision - see `TODO.md`
+> sections 2 and 4 for the full reasoning. The same audit also surfaced a
+> second, unrelated finding: 60 orphaned `Organisation` documents left over
+> from Phase 1-4 testing, invisible to the Phase 6 test-data audit because
+> that one only checked the `users` collection. Fixed properly, not just
+> cleaned up: `server/services/orgCascadeService.js` (`deleteOrgCascade`) is
+> new, reusable, org-level cascade-delete logic - the app previously had none
+> at all (no route ever deletes a `User` or `Organisation`). See `TODO.md`
+> section 5 and commit `b2f7c7d`.
 
 ---
 
