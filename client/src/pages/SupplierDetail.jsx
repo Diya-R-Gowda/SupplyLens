@@ -260,6 +260,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
           alerts={twin?.alerts}
           riskNarrative={twin?.risk?.lastChange?.narrative}
           healthNarrative={twin?.health?.lastChange?.narrative}
+          projectedAlerts={twin?.projectedAlerts}
         />
         <div className="flex justify-between items-center gap-3">
           <Button onClick={onBack} className={pillButtonClass}>Back</Button>
