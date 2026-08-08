@@ -474,7 +474,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
           />
         </section>
 
-        <RiskHealthTrendChart riskItems={riskHistory} healthItems={healthHistory} />
+        <RiskHealthTrendChart riskItems={riskHistory} healthItems={healthHistory} forecast={forecast} />
 
         <ForecastPanel
           title="Risk & health forecast"
