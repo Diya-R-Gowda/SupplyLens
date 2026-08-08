@@ -15,6 +15,7 @@ import SnapshotPanel from '../components/SnapshotPanel';
 import RiskHealthTrendChart from '../components/RiskHealthTrendChart';
 import ConfidenceBadge from '../components/ConfidenceBadge';
 import AlertBanner from '../components/AlertBanner';
+import ForecastPanel from '../components/ForecastPanel';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -76,6 +77,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
 
   const [riskHistory, setRiskHistory] = useState([]);
   const [healthHistory, setHealthHistory] = useState([]);
+  const [forecast, setForecast] = useState(null);
 
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
@@ -105,6 +107,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       .catch(() => { setRiskHistory([]); setHealthHistory([]); });
   };
 
+  const loadForecast = () => {
+    api.get(`/suppliers/${supplierId}/forecast`).then((res) => setForecast(res.data.data)).catch(() => setForecast(null));
+  };
+
   useEffect(() => {
     if (!supplierId) return;
     api.get(`/suppliers/${supplierId}`).then(res => setSupplier(res.data.data));
@@ -113,6 +119,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
     loadTwin();
     loadHistory();
     loadSnapshots();
+    loadForecast();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
@@ -153,6 +160,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       loadTimeline();
       loadTwin();
       loadHistory();
+      loadForecast();
       onChanged?.();
     } catch (requestError) {
       const details = requestError?.response?.data?.error?.details;
@@ -172,6 +180,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       loadTimeline();
       loadTwin();
       loadHistory();
+      loadForecast();
     } catch (requestError) {
       setEnrichError(requestError?.response?.data?.error?.message || 'Unable to enrich supplier data.');
     } finally {
@@ -187,6 +196,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       loadTimeline();
       loadTwin();
       loadHistory();
+      loadForecast();
     } catch (requestError) {
       setEsgError(requestError?.response?.data?.error?.message || 'Unable to refresh ESG data.');
     } finally {
@@ -202,6 +212,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       loadTimeline();
       loadTwin();
       loadHistory();
+      loadForecast();
     } catch (requestError) {
       setLogisticsError(requestError?.response?.data?.error?.message || 'Unable to refresh logistics data.');
     } finally {
@@ -385,6 +396,7 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
                 loadTimeline();
                 loadTwin();
                 loadHistory();
+                loadForecast();
               } catch (uploadError) {
                 setUploadStatus(uploadError?.response?.data?.error?.message || 'Failed to process document.');
               }
@@ -461,6 +473,12 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
         </section>
 
         <RiskHealthTrendChart riskItems={riskHistory} healthItems={healthHistory} />
+
+        <ForecastPanel
+          title="Risk & health forecast"
+          subtitle="A hand-rolled linear projection from this supplier's own history - not a guarantee, and honestly gated below a minimum real, time-spread sample."
+          forecast={forecast}
+        />
 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
           <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Snapshots</h2>
