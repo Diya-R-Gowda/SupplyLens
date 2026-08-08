@@ -11,6 +11,7 @@ const { openDownloadStream } = require('../services/gridfsService');
 const { deleteSupplierCascade } = require('../services/supplierCascadeService');
 const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
 const { simulateSupplierFailure } = require('../services/simulationService');
+const { generateMitigationStrategies } = require('../services/mitigationService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1519,6 +1520,62 @@ router.post('/:id/simulate-failure', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const simulation = await simulateSupplierFailure(supplier);
   return sendSuccess(res, simulation);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/mitigation-strategies:
+ *   post:
+ *     summary: Phase 7 Step 2 - AI-generated mitigation strategies for this supplier failing
+ *     description: >
+ *       Re-runs Step 1's failure simulation server-side (never trusts a client-supplied one) and
+ *       feeds that real context to Gemini, asking for 2-4 concrete, situation-specific mitigation
+ *       strategies with a self-reported 0-1 confidence per strategy. **This is AI-generated, not a
+ *       verified recommendation** - the same "AI-generated - verify independently" convention as
+ *       enrichment/ESG/logistics applies, and confidence here inherits Phase 5's known limitation
+ *       (self-reported, no calibration verification). Not available in demo mode.
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 2-4 mitigation strategies with per-strategy confidence
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/mitigation-strategies', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Mitigation strategies are not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const simulation = await simulateSupplierFailure(supplier);
+  const mitigation = await generateMitigationStrategies(simulation);
+  return sendSuccess(res, mitigation);
 }));
 
 module.exports = router;
