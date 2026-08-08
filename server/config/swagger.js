@@ -29,6 +29,7 @@ const options = {
       { name: 'Config', description: 'Per-org configurable risk/health scoring weights and alert thresholds.' },
       { name: 'Forecasting', description: 'Phase 6 - hand-rolled linear-regression forecasts (per-supplier and portfolio-level), gated on real data sufficiency.' },
       { name: 'Scenario Simulator', description: 'Phase 7 - failure simulation, AI mitigation strategies, alternative-supplier recommendations, business impact, and recovery planning. Every endpoint explicitly labels output as real-data-derived or AI-estimated - never blended silently.' },
+      { name: 'Agents', description: 'Phase 8 - persona-focused synthesis/extraction over existing real data (there is no multi-step tool-calling framework in this app - "agent" means a scoped Gemini call, per the Phase 8 audit in CONTRIBUTING.md). Each endpoint\'s docs state plainly whether it is genuine synthesis/extraction, a focused-lens restatement of existing Phase 4 data, or a hardcoded abstention on a claim with no real data source.' },
     ],
     components: {
       securitySchemes: {

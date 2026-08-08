@@ -15,6 +15,7 @@ const { generateMitigationStrategies } = require('../services/mitigationService'
 const { findAlternativeSuppliers } = require('../services/similarityService');
 const { computeBusinessImpact } = require('../services/businessImpactService');
 const { estimateRecoveryTime } = require('../services/recoveryPlanningService');
+const { analyzeRisk } = require('../services/riskAnalystAgentService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -1841,6 +1842,66 @@ router.get('/:id/recovery-estimate', auth, asyncHandler(async (req, res) => {
   const simulation = await simulateSupplierFailure(supplier);
   const estimate = await estimateRecoveryTime(simulation);
   return sendSuccess(res, estimate);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/agents/risk-analyst:
+ *   post:
+ *     summary: Phase 8 Step 1 - Risk Analyst Agent, synthesizing already-real risk/health data into one assessment
+ *     description: >
+ *       Per the Phase 8 audit (CONTRIBUTING.md), this is the strongest-grounded of the five agents:
+ *       every input is already real and independently computed elsewhere in this app - current
+ *       risk/health scores and factors, RiskHistory/HealthHistory's audit trail with
+ *       narrativeService's deterministic per-change prose, predictiveAnalyticsService's forecast
+ *       (honestly gated on data sufficiency), anomalyService's compounding-drift/sentiment-shift
+ *       findings, and alertService's active/projected breaches. Gemini's only job is synthesis of
+ *       these real numbers into one written assessment - explicitly instructed not to invent
+ *       anything beyond what's provided, and to state plainly when a dimension (e.g. forecast) was
+ *       not available rather than silently omitting it. `dataAvailability` is computed in code, not
+ *       by Gemini, so which dimensions were actually real for this run is always independently
+ *       verifiable. Not available in demo mode (needs real history/config lookups).
+ *     tags: [Agents]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Written risk assessment with key concerns, confidence, and a data-availability breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.post('/:id/agents/risk-analyst', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('The Risk Analyst agent is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const assessment = await analyzeRisk(supplier);
+  return sendSuccess(res, assessment);
 }));
 
 module.exports = router;

@@ -17,6 +17,7 @@ import ConfidenceBadge from '../components/ConfidenceBadge';
 import AlertBanner from '../components/AlertBanner';
 import ForecastPanel from '../components/ForecastPanel';
 import ScenarioSimulatorPanel from '../components/ScenarioSimulatorPanel';
+import AgentsPanel from '../components/AgentsPanel';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -104,6 +105,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [recoveryEstimate, setRecoveryEstimate] = useState(null);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
+
+  const [riskAnalyst, setRiskAnalyst] = useState(null);
+  const [riskAnalystLoading, setRiskAnalystLoading] = useState(false);
+  const [riskAnalystError, setRiskAnalystError] = useState('');
 
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
@@ -339,6 +344,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setRecoveryError(requestError?.response?.data?.error?.message || 'Unable to estimate recovery time.');
     } finally {
       setRecoveryLoading(false);
+    }
+  };
+
+  const handleRunRiskAnalyst = async () => {
+    setRiskAnalystLoading(true);
+    setRiskAnalystError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/risk-analyst`);
+      setRiskAnalyst(response.data.data);
+    } catch (requestError) {
+      setRiskAnalystError(requestError?.response?.data?.error?.message || 'Unable to run the Risk Analyst agent.');
+    } finally {
+      setRiskAnalystLoading(false);
     }
   };
 
@@ -633,6 +651,16 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onGetRecoveryEstimate={handleGetRecoveryEstimate}
             recoveryLoading={recoveryLoading}
             recoveryError={recoveryError}
+          />
+        </section>
+
+        <section className="rounded-[20px] p-5 bg-sky-50/60 border border-sky-300/40">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Agents</h2>
+          <AgentsPanel
+            riskAnalyst={riskAnalyst}
+            onRunRiskAnalyst={handleRunRiskAnalyst}
+            riskAnalystLoading={riskAnalystLoading}
+            riskAnalystError={riskAnalystError}
           />
         </section>
 
