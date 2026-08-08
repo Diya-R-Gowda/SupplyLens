@@ -126,6 +126,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [logisticsAgentLoading, setLogisticsAgentLoading] = useState(false);
   const [logisticsAgentError, setLogisticsAgentError] = useState('');
 
+  const [managerSummary, setManagerSummary] = useState(null);
+  const [managerSummaryLoading, setManagerSummaryLoading] = useState(false);
+  const [managerSummaryError, setManagerSummaryError] = useState('');
+
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
   const lastHealthChange = timeline.find((event) => event.type === 'health_changed');
@@ -425,6 +429,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setLogisticsAgentError(requestError?.response?.data?.error?.message || 'Unable to run the Logistics agent.');
     } finally {
       setLogisticsAgentLoading(false);
+    }
+  };
+
+  const handleRunManagerSummary = async () => {
+    setManagerSummaryLoading(true);
+    setManagerSummaryError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/agents/manager-summary`);
+      setManagerSummary(response.data.data);
+    } catch (requestError) {
+      setManagerSummaryError(requestError?.response?.data?.error?.message || 'Unable to generate the executive summary.');
+    } finally {
+      setManagerSummaryLoading(false);
     }
   };
 
@@ -745,6 +762,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
             onRunLogisticsAgent={handleRunLogisticsAgent}
             logisticsAgentLoading={logisticsAgentLoading}
             logisticsAgentError={logisticsAgentError}
+            managerSummary={managerSummary}
+            onRunManagerSummary={handleRunManagerSummary}
+            managerSummaryLoading={managerSummaryLoading}
+            managerSummaryError={managerSummaryError}
           />
         </section>
 

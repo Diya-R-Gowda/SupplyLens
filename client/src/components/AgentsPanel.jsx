@@ -27,6 +27,7 @@ export default function AgentsPanel({
   finance, onRunFinance, financeLoading, financeError,
   esg, onRunEsg, esgLoading, esgError,
   logisticsAgent, onRunLogisticsAgent, logisticsAgentLoading, logisticsAgentError,
+  managerSummary, onRunManagerSummary, managerSummaryLoading, managerSummaryError,
 }) {
   return (
     <div className="grid gap-3.5">
@@ -36,6 +37,45 @@ export default function AgentsPanel({
         the badge on each section states which. No agent estimates a claim with no real data source;
         where that's true, it says so instead of guessing.
       </p>
+
+      <Card className="grid gap-2.5 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-300/40">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="m-0 font-semibold text-slate-800">Executive Summary (Manager Agent)</p>
+          <Button className="rounded-full px-3 py-1.5 text-[0.85rem]" onClick={onRunManagerSummary} loading={managerSummaryLoading} loadingText="Synthesizing...">
+            {managerSummary ? 'Re-generate' : 'Generate summary'}
+          </Button>
+        </div>
+        <p className="m-0 text-slate-500 text-[0.78rem]">
+          Runs all five agents below and synthesizes their real outputs into one summary - preserves,
+          not flattens, the depth difference between genuine analysis and focused-lens restatements.
+        </p>
+        {managerSummaryError ? <p className="m-0 text-red-700 text-[0.85rem]">{managerSummaryError}</p> : null}
+        {managerSummary ? (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge className={genuineBadgeClass}>Synthesis of the 5 agents below</Badge>
+              <ConfidenceBadge value={managerSummary.confidence} />
+            </div>
+            <p className="m-0 text-slate-900 text-[0.95rem] font-medium">{managerSummary.executiveSummary}</p>
+            {managerSummary.topPriorities.length ? (
+              <ul className="m-0 pl-5 grid gap-1 text-slate-700 text-[0.85rem]">
+                {managerSummary.topPriorities.map((item, index) => <li key={index}>{item}</li>)}
+              </ul>
+            ) : null}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <Badge className={genuineBadgeClass}>Risk: genuine synthesis</Badge>
+              <Badge className={genuineBadgeClass}>Legal: genuine extraction</Badge>
+              <Badge className={managerSummary.inputs.finance.mode === 'real' ? realBadgeClass : estimateBadgeClass}>
+                Finance: {managerSummary.inputs.finance.mode === 'real' ? 'real math' : 'AI estimate'} + abstention
+              </Badge>
+              <Badge className={focusedLensBadgeClass}>ESG: focused lens</Badge>
+              <Badge className={focusedLensBadgeClass}>Logistics: focused lens</Badge>
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-slate-600 text-[0.85rem]">Generate a written executive summary synthesizing all five agents below.</p>
+        )}
+      </Card>
 
       <Card className="grid gap-2.5 p-4 rounded-2xl bg-white/72">
         <div className="flex items-center justify-between gap-3 flex-wrap">
