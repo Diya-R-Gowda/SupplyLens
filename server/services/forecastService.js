@@ -184,6 +184,17 @@ const forecastFromPoints = (rawPoints, horizonsDays = FORECAST_HORIZONS_DAYS) =>
     },
     trend: {
       slope: Math.round(slope * 1000) / 1000,
+      intercept: Math.round(intercept * 1000) / 1000,
+      // The exact timestamp `t=0` in the regression's own t/y coordinates -
+      // exposed so a consumer (Phase 6 Step 5's trend-line overlay on
+      // RiskHealthTrendChart.jsx) can reconstruct this EXACT fitted line at
+      // any timestamp via `intercept + slope * daysSince(anchorTimestamp)`,
+      // even if it's displaying a different subset/window of points than
+      // the ones actually used to fit the regression here - without this,
+      // a consumer guessing its own anchor from whatever points it happens
+      // to have on hand could silently draw a different line than the one
+      // this forecast's own dataQuality/projections are actually based on.
+      anchorTimestamp: points[0].timestamp,
       direction: slope > 0.05 ? 'rising' : (slope < -0.05 ? 'falling' : 'flat'),
     },
     projections,
