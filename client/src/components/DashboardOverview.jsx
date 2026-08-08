@@ -47,7 +47,12 @@ export default function DashboardOverview({ stats, loading, error, onOpenSupplie
 
   return (
     <div className="grid gap-3.5">
-      <ActiveAlertsPanel activeAlerts={stats.activeAlerts} projectedActiveAlerts={stats.projectedActiveAlerts} onOpen={onOpenSupplier} />
+      <ActiveAlertsPanel
+        activeAlerts={stats.activeAlerts}
+        projectedActiveAlerts={stats.projectedActiveAlerts}
+        anomalyAlerts={stats.anomalyAlerts}
+        onOpen={onOpenSupplier}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
         <StatCard label="Total suppliers" value={stats.totalSuppliers} />

@@ -13,10 +13,16 @@ import Card from './Card';
 // same red group as a real, already-happened breach; the language and
 // color both say "projected," not "confirmed," so a user can't mistake one
 // for the other.
+//
+// Phase 6 Step 4 (Anomaly Detection) adds `anomalies` - a third, violet
+// group for "no threshold crossed (present or projected), but the pattern
+// itself looks unusual": several small changes compounding, or a recent
+// worsening in news sentiment. A third distinct color/icon so this reads
+// as its own category, not a lesser version of either alert above.
 export default function AlertBanner({
-  alerts, riskNarrative, healthNarrative, projectedAlerts,
+  alerts, riskNarrative, healthNarrative, projectedAlerts, anomalies,
 }) {
-  if (!alerts && !projectedAlerts) return null;
+  if (!alerts && !projectedAlerts && !anomalies) return null;
 
   const items = [];
   if (alerts?.risk?.breached) {
@@ -52,7 +58,28 @@ export default function AlertBanner({
     });
   }
 
-  if (items.length === 0 && projectedItems.length === 0) return null;
+  const anomalyItems = [];
+  const { compoundingDrift, sentimentShift } = anomalies || {};
+  if (compoundingDrift?.risk?.status === 'ok' && compoundingDrift.risk.detected) {
+    anomalyItems.push({
+      key: 'risk-drift',
+      text: `Risk score has drifted up by ${compoundingDrift.risk.cumulativeDrift} points over the last ${compoundingDrift.risk.windowDays} days - several smaller changes adding up, none individually large enough to trigger an alert on its own.`,
+    });
+  }
+  if (compoundingDrift?.health?.status === 'ok' && compoundingDrift.health.detected) {
+    anomalyItems.push({
+      key: 'health-drift',
+      text: `Health score has drifted down by ${Math.abs(compoundingDrift.health.cumulativeDrift)} points over the last ${compoundingDrift.health.windowDays} days - several smaller changes adding up, none individually large enough to trigger an alert on its own.`,
+    });
+  }
+  if (sentimentShift?.status === 'ok' && sentimentShift.detected) {
+    anomalyItems.push({
+      key: 'sentiment-shift',
+      text: `News sentiment has shifted noticeably negative in the last ${sentimentShift.windowDays} days (${Math.round(sentimentShift.newerNegativeRate * 100)}% of recent articles negative, up from ${Math.round(sentimentShift.olderNegativeRate * 100)}% earlier in the same window).`,
+    });
+  }
+
+  if (items.length === 0 && projectedItems.length === 0 && anomalyItems.length === 0) return null;
 
   return (
     <div className="grid gap-2.5">
@@ -74,6 +101,15 @@ export default function AlertBanner({
               <p className="m-0 text-[0.8rem] text-amber-700">
                 Confidence: {item.confidenceLevel} (range {item.interval.low}-{item.interval.high}) - a projection, not a confirmed breach.
               </p>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+      {anomalyItems.length > 0 ? (
+        <Card className="grid gap-2 p-4 rounded-2xl bg-violet-50 border-violet-300/60">
+          {anomalyItems.map((item) => (
+            <div key={item.key} className="grid gap-0.5">
+              <p className="m-0 font-semibold text-violet-800">&#9711; Anomaly detected - {item.text}</p>
             </div>
           ))}
         </Card>
