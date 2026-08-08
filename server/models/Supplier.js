@@ -59,6 +59,29 @@ const supplierSchema = new mongoose.Schema({
     source: { type: String, enum: ['gemini'] },
     refreshedAt: Date,
   },
+  // Phase 7 Step 4 - real, user-populated business-value fields. Unlike
+  // enrichment/esg/logistics above, this is NEVER AI-generated itself - it's
+  // the actual real numbers a user enters (contract value, spend,
+  // criticality) that businessImpactService.js uses for genuine math when
+  // present. All optional and independently settable via
+  // PATCH /suppliers/:id/business-fields; when absent, the service falls
+  // back to an explicitly-labeled AI estimate instead - the two are never
+  // blended into one number without saying which is which (see TODO.md for
+  // the product decision this follows: same "AI estimates as a starting
+  // default, real input overrides and improves over time" pattern already
+  // established for enrichment/ESG/logistics).
+  businessImpact: {
+    contractValue: {
+      amount: { type: Number, min: 0 },
+      currency: { type: String, trim: true, uppercase: true, minlength: 3, maxlength: 3 },
+    },
+    estimatedAnnualSpend: { type: Number, min: 0 },
+    // 1-5 scale (not enum labels) so it composes numerically if ever needed
+    // (e.g. sorting/filtering) - 1 = low criticality, 5 = mission-critical.
+    criticalityRating: { type: Number, min: 1, max: 5 },
+    dependencyNotes: { type: String, trim: true, maxlength: 500 },
+    updatedAt: Date,
+  },
 }, { timestamps: true });
 
 // Every existing query filters by orgId (routes/suppliers.js); this compound index
