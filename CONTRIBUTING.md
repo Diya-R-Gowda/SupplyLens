@@ -190,15 +190,30 @@ Full pass/fail verification of all of the above is in [Phase 4 Complete — End-
 
 ---
 
-# Remaining Work — Phase 5 (Explainable Risk Scoring)
+# Remaining Work — Phase 5 (Explainable Risk Scoring) — ✅ COMPLETE (2026-08-06)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Risk Scoring Engine | Calculate weighted supplier risk scores using configurable factors. |
-| 🔴 | Explainable AI | Explain why supplier risk changed and identify contributing factors. |
-| 🔴 | Confidence Scores | Display confidence levels for every AI-generated recommendation. |
-| 🔴 | Risk History | Maintain historical supplier risk trends and visualizations. |
-| 🔴 | Alert Thresholds | Trigger alerts when configurable risk limits are exceeded. |
+| 🟢 | Risk Scoring Engine | Per-org configurable weight table (`RiskConfig` model) for both Risk and Health Score formulas. Hard-rejected, not auto-normalized, if a submitted weight set doesn't sum to 1 (±0.005 tolerance). Admin-only `PATCH /org/risk-config`; lazily created on first edit, `GET` never writes a row. |
+| 🟢 | Explainable AI | Deterministic narrative sentences (`narrativeService.js`, no extra Gemini call) explaining each risk/health score change - names the dominant contributing factor, weight-aware. Wired into Timeline and a "Why did this change?" toggle on the Digital Twin panel. |
+| 🟢 | Confidence Scores | Self-reported 0-1 confidence added to the existing enrichment/ESG/logistics/sentiment Gemini prompts (no new call sites), rendered via a color-coded `ConfidenceBadge` everywhere that data is shown. |
+| 🟢 | Risk History | New `GET /suppliers/:id/risk-health-history` endpoint plus a dual-line recharts trend chart on the supplier page; dashboard gained an average-health-score stat and a "Trending down" worsening-health panel. |
+| 🟢 | Alert Thresholds | Per-org configurable risk/health thresholds (defaults matched to `RiskBadge`/`HealthBadge`'s existing red-zone cutoffs), compute-on-read breach state (no scheduled cron needed), an in-app per-supplier alert banner, a dashboard-wide active-alerts panel, and an automatic snapshot on a fresh threshold crossing. |
+
+See [Phase 5 Complete — End-to-End Smoke Test](#-phase-5-complete--end-to-end-smoke-test-2026-08-06) below for the full verification results.
+
+## Phase 5 — Technical Summary
+
+**Starting point: a completed read-only audit** against the Explainable Risk Scoring spec (Risk Scoring Engine, Explainable AI, Confidence Scores, Risk History, Alert Thresholds), confirming live that scoring weights were hardcoded literals inside `riskScoreService.js`/`healthScoreService.js`, no factor-attribution narrative existed anywhere, enrichment/ESG/logistics/sentiment returned no confidence signal, `RiskHistory`/`HealthHistory` existed but had no dedicated trend endpoint or chart, and there was no threshold/alerting concept at all.
+
+- **Configurable weights** - `RiskConfig` (per-`orgId`, unique) holds `riskWeights`/`healthWeights`/`alertThresholds` sub-documents with defaults matching the original Phase 3/4 formulas exactly, so an org that never opens the settings panel sees byte-identical scores to pre-Phase-5 behavior. Validation is a hard 400 rejection with the actual submitted sum in the error, not a silent rescale - deliberately, so a misconfigured org can't silently produce nonsense scores (see `TODO.md`). A percent-based (0-100) `RiskConfigPanel.jsx` editor with a live running-total check gates the Save button until both risk and health groups sum to exactly 100%.
+- **Explainable narratives** - `narrativeService.js` ranks each formula's factors by contribution and turns the top one into a plain-English sentence, reusing the already-persisted `RiskHistory`/`HealthHistory` rows rather than a new Gemini call. Two real bugs were found and fixed via live testing, not code review: a factor's individually-ranked direction could contradict the actual (capped) reported delta's sign, and a weight-only edit with no underlying factor value change produced a bare "score fell by -11" narrative naming no factor at all, since the original diff model only detected value changes. Fixed by adding a `weightsUsed` snapshot field to both history models and changing the contribution formula to `(value_now * weight_now) - (value_prev * weight_prev)`, plus rephrasing sentences to state the real delta and the dominant factor's own movement as two separate, both-true facts rather than a causal claim.
+- **Confidence scores** - a `0-1` numeric scale (not low/medium/high), self-reported by Gemini via the same prompted-JSON pattern already proven for sentiment, added to the *existing* enrichment/ESG/logistics/sentiment prompts rather than a separate scoring pass or token-level logprobs (model/tier-limited, and measures token likelihood rather than semantic confidence). Live-verified to genuinely discriminate: Tesla/Siemens scored 0.85-1.0 on enrichment/ESG but 0-0.4 on logistics where public data is scarce, and a fabricated company name scored 0 across the board.
+- **Risk/health history** - a dedicated `GET /suppliers/:id/risk-health-history` (independent pagination per series, optional `days` filter) rather than overloading the mixed-event timeline endpoint, since a trend chart needs clean numeric series, not merged event types. Chart renders risk and health as two independent `<Line>` series (their timestamps don't align) sharing one `XAxis` with `allowDuplicatedCategory={false}`.
+- **Alert thresholds** - compute-on-read against the supplier's current persisted score (`twinService.js`'s `alerts` field, `GET /dashboard/stats`'s `activeAlerts`), the same precedent as the Digital Twin itself - always accurate regardless of when the score last changed, no staleness window a cron would need to close. A snapshot is still taken on a fresh crossing (`isNewBreach()`, reusing the existing significant-change snapshot mechanism in `twinSyncService.js`), with a real precedence bug found and fixed live: when a change was simultaneously a large swing *and* a fresh crossing, the original `if/else` order always labeled the snapshot `'significant_change'`, silently losing the more decision-relevant `'threshold_breach'` reason.
+- **Org-scoping** - every new endpoint (`/org/risk-config`, `/suppliers/:id/risk-health-history`) explicitly cross-org tested (404, not leaked), continuing the standing discipline from every prior phase.
+
+Full pass/fail verification of all of the above is in [Phase 5 Complete — End-to-End Smoke Test](#-phase-5-complete--end-to-end-smoke-test-2026-08-06); open items (weight-table default tuning, RAG-chat-confidence deferral, known limitations) are tracked in `TODO.md`.
 
 ---
 
@@ -456,6 +471,45 @@ Non-obvious calls made during Phase 4, kept here so the reasoning isn't lost onc
 - **Digital Twin stays compute-on-read, not persisted** - explicitly recommended by the audit and consistent with the timeline endpoint's existing precedent. No sync burden, always fresh by construction. Revisit only if this becomes a real performance concern at scale (unbenchmarked - see `TODO.md`).
 - **An on-demand snapshot is automatically taken when either score moves by a significant (≥15-point, i.e. capped) amount**, on top of the existing scheduled+manual triggers - deliberately not on every minor mutation, which would defeat the retention cap's whole purpose. Verified live: a capped risk swing correctly triggered a `reason: significant_change` snapshot with no explicit request to do so.
 - **Found and fixed a real bug during ESG/logistics testing, not just at the end:** `Number(null)` evaluates to `0` in JavaScript, not `NaN` - the initial coercion silently converted Gemini's correct "I don't know" `null` responses into a misleading literal `0` for on-time-delivery-rate (reading as "0%" instead of "unknown"). Caught by inspecting the raw Gemini response directly rather than trusting the parsed output, fixed before it ever reached the UI.
+
+---
+
+# ✅ Phase 5 Complete — End-to-End Smoke Test (2026-08-06)
+
+Every item from the Phase 5 plan above (configurable weights, explainable narratives, confidence scores, risk/health trend history, alert thresholds) has been implemented, hardened, and verified against real Atlas data and real Gemini calls - not just code review. Built directly on a completed read-only audit rather than re-discovering its findings.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Editing org weights via the real UI changes real scores | 🟢 PASS | Weight settings panel edit + save, confirmed the running-total validation blocks an unbalanced save, and a subsequent supplier score computation used the new weights |
+| 2 | Weight validation hard-rejects a bad sum | 🟢 PASS | `PATCH /org/risk-config` returned `400 INVALID_CONFIG` with the actual submitted sum, no silent rescale |
+| 3 | Config is lazily created, not on read | 🟢 PASS | `GET /org/risk-config` for a never-configured org returned defaults with `isDefault: true` and wrote no document; the first `PATCH` created it |
+| 4 | Narrative correctly attributes a factor-value-driven change | 🟢 PASS | Verified against a real news-driven score change |
+| 5 | Narrative correctly attributes a weight-only change (no factor value change) | 🟢 PASS | Found and fixed a real blind spot first (see below) - after the fix, correctly named "country risk's contribution increased (now 100%)" following a weight-only edit with zero underlying data change |
+| 6 | Narrative never states a contradictory causal claim | 🟢 PASS | Found and fixed a real sign-mismatch bug first (see below) - re-verified the rephrased sentence structure across several capped-change scenarios |
+| 7 | Confidence scores genuinely discriminate, not maxed out | 🟢 PASS | Tesla/Siemens: 0.85-1.0 on enrichment/ESG, 0-0.4 on logistics (data-scarce); a fabricated company: 0 across the board |
+| 8 | Risk/health trend chart renders real history | 🟢 PASS | Dual-line chart populated from real `RiskHistory`/`HealthHistory` rows for a supplier with several score changes |
+| 9 | Dashboard average health score + worsening-health panel | 🟢 PASS | Cross-checked against the same underlying data used by the per-supplier chart |
+| 10 | Alert banner + dashboard active-alerts panel fire on a real breach | 🟢 PASS | Lowered a test org's risk threshold, triggered a real enrich-driven score change, confirmed both the per-supplier banner and the dashboard panel showed the breaching supplier with the correct narrative text |
+| 11 | Snapshot reason correctly prioritizes threshold breach over significant change | 🟢 PASS | Found and fixed a real precedence bug first (see below) - re-verified the snapshot was labeled `'threshold_breach'`, not `'significant_change'`, on a simultaneous large-swing-plus-crossing |
+| 12 | Cross-org access blocked on every new endpoint | 🟢 PASS | `/org/risk-config` (GET+PATCH) and `/suppliers/:id/risk-health-history` both correctly 404 for a second org |
+| 13 | Full smoke run across every Phase 5 UI surface, zero console errors (Playwright) | 🟢 PASS | Weight settings, supplier creation, enrich/ESG/logistics refresh, dashboard stats, trend chart, narrative toggle, and confidence badges all exercised together in one pass |
+
+All test data (orgs, suppliers, weight configs, alerts) created during testing was cleaned from Atlas after every pass.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 5, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Weight validation is a hard 400 rejection, not a silent auto-normalize.** A misconfigured org (weights that don't sum to 1) gets a loud error with the actual submitted sum, rather than having its input silently rescaled to something it didn't ask for - the failure mode a configurable-weights feature most needs to avoid is an admin who thinks they set weights one way while the app quietly used another. Revisable if this proves too strict in practice (`TODO.md`).
+- **`RiskConfig` is lazily created on the first `PATCH`, not on the first `GET`.** Reading a never-configured org's weights returns the hardcoded defaults directly, with no row written - avoids a placeholder document for every org that never opens the settings panel.
+- **Confidence is a self-reported `0-1` number from the same prompted-JSON pattern as sentiment, not token-level logprobs.** The Gemini Node SDK's logprobs support is model/tier-limited and measures token likelihood, not semantic confidence in the answer - a self-report was judged more useful and consistent with the existing sentiment precedent. Live-verified to vary sensibly by company and by field rather than being uniformly maxed out.
+- **Found and fixed a real narrative sign-contradiction bug during live testing:** ranking factors by `(value_now - value_prev) * weight` could name a factor as the reason for a change whose own direction contradicted the actual reported delta's sign, whenever an earlier score change had itself been capped (so the stored `previousScore` wasn't the true raw weighted sum of `previousFactors`). Fixed by rephrasing every narrative sentence to state the real delta and the dominant factor's own movement as two separate, both-true facts, never a causal claim between them. (`server/services/narrativeService.js`)
+- **Found and fixed a real narrative blind spot in the same pass:** a weight-only edit between two measurements, with no underlying factor value change, produced a bare "score fell by -11" narrative naming no factor, because the original contribution model only diffed factor *values*. Fixed by snapshotting the weights actually used (`weightsUsed` field on `RiskHistory`/`HealthHistory`) and changing the contribution formula to `(value_now * weight_now) - (value_prev * weight_prev)`, which correctly attributes weight-driven changes too.
+- **No scheduled cron checks for threshold breaches.** Alert state is computed fresh from the supplier's current persisted score on every read (`twinService.js`, `GET /dashboard/stats`) - there's no staleness window a periodic re-check would close. A cron would only add value paired with a push notification channel (email/SMS) to fire from at the moment of breach, which doesn't exist yet (`TODO.md`).
+- **Found and fixed a real snapshot-labeling precedence bug:** when a change was simultaneously a large (capped) swing and a fresh threshold crossing, the original `if (significant) {...} else if (breach) {...}` ordering always labeled the snapshot `'significant_change'`, silently losing the more decision-relevant `'threshold_breach'` fact. Fixed by checking the breach condition first. (`server/services/twinSyncService.js`)
+- **Default alert thresholds (risk ≥70, health ≤30) were chosen to match `RiskBadge`/`HealthBadge`'s existing red-zone cutoffs**, not arbitrary new numbers, so a breach lines up with what a user already reads as "red" on the badge.
 
 ---
 
