@@ -13,6 +13,7 @@ const { getSupplierForecast } = require('../services/predictiveAnalyticsService'
 const { simulateSupplierFailure } = require('../services/simulationService');
 const { generateMitigationStrategies } = require('../services/mitigationService');
 const { findAlternativeSuppliers } = require('../services/similarityService');
+const { computeBusinessImpact } = require('../services/businessImpactService');
 const { enrichSupplierData, enrichEsgData, enrichLogisticsData } = require('../services/enrichmentService');
 const { gatherSupplierData } = require('../services/supplierAggregationService');
 const { getOrgWeights } = require('../services/riskConfigService');
@@ -66,6 +67,16 @@ const updateSupplierValidation = [
   body('riskScore').optional().isFloat({ min: 0, max: 100 }).withMessage('Risk score must be between 0 and 100').toFloat(),
   body('paymentTerms').optional().trim().isLength({ max: 100 }).withMessage('Payment terms must be at most 100 characters'),
   body('contractExpiry').optional({ nullable: true }).isISO8601().withMessage('Contract expiry must be a valid date (e.g. 2026-12-31)').toDate(),
+];
+
+// Phase 7 Step 4 - all optional, independently settable; omitted fields are
+// left as-is (same PATCH-merge semantics as the supplier update route above).
+const businessFieldsValidation = [
+  body('contractValue.amount').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Contract value amount must be a non-negative number').toFloat(),
+  body('contractValue.currency').optional({ nullable: true }).trim().isLength({ min: 3, max: 3 }).withMessage('Currency must be a 3-letter code (e.g. USD)'),
+  body('estimatedAnnualSpend').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Estimated annual spend must be a non-negative number').toFloat(),
+  body('criticalityRating').optional({ nullable: true }).isInt({ min: 1, max: 5 }).withMessage('Criticality rating must be an integer from 1 to 5').toInt(),
+  body('dependencyNotes').optional({ nullable: true }).trim().isLength({ max: 500 }).withMessage('Dependency notes must be at most 500 characters'),
 ];
 
 const SUPPLIER_NOT_FOUND = () => new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
@@ -1632,6 +1643,146 @@ router.get('/:id/alternatives', auth, asyncHandler(async (req, res) => {
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
   const alternatives = await findAlternativeSuppliers(supplier);
   return sendSuccess(res, alternatives);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/business-fields:
+ *   patch:
+ *     summary: Phase 7 Step 4 - set real business-value fields for this supplier (admin only)
+ *     description: >
+ *       All fields optional and independently settable - only fields present in the body are
+ *       changed, matching the existing supplier update route's PATCH-merge semantics. These are
+ *       NEVER AI-generated - they're the real numbers a user enters. Once any of contractValue or
+ *       estimatedAnnualSpend is set, `GET /suppliers/{id}/business-impact` switches from an
+ *       AI-estimated default to real calculated math. Not available in demo mode.
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               contractValue:
+ *                 type: object
+ *                 properties:
+ *                   amount: { type: number, minimum: 0, example: 250000 }
+ *                   currency: { type: string, example: USD }
+ *               estimatedAnnualSpend: { type: number, minimum: 0, example: 80000 }
+ *               criticalityRating: { type: integer, minimum: 1, maximum: 5, example: 4 }
+ *               dependencyNotes: { type: string, maxLength: 500 }
+ *     responses:
+ *       200:
+ *         description: Updated business-impact fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: A field failed validation, or not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.patch('/:id/business-fields', auth, requireRole('admin'), validate(businessFieldsValidation), asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Business fields are not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const existing = supplier.businessImpact || {};
+  const { contractValue, estimatedAnnualSpend, criticalityRating, dependencyNotes } = req.body;
+
+  supplier.businessImpact = {
+    contractValue: contractValue?.amount !== undefined
+      ? { amount: contractValue.amount, currency: contractValue.currency || existing.contractValue?.currency || 'USD' }
+      : existing.contractValue,
+    estimatedAnnualSpend: estimatedAnnualSpend !== undefined ? estimatedAnnualSpend : existing.estimatedAnnualSpend,
+    criticalityRating: criticalityRating !== undefined ? criticalityRating : existing.criticalityRating,
+    dependencyNotes: dependencyNotes !== undefined ? dependencyNotes : existing.dependencyNotes,
+    updatedAt: new Date(),
+  };
+  await supplier.save();
+
+  return sendSuccess(res, supplier.businessImpact);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/business-impact:
+ *   get:
+ *     summary: Phase 7 Step 4 - business impact of losing this supplier, real math or AI estimate
+ *     description: >
+ *       If real fields have been set via `PATCH /suppliers/{id}/business-fields` (contractValue or
+ *       estimatedAnnualSpend), returns `mode: 'real'` with figures computed directly from them - no
+ *       Gemini call happens. If neither is set, returns `mode: 'ai_estimate'` - a Gemini-generated
+ *       starting estimate labeled "AI-estimated - populate with real data for accuracy", with a
+ *       self-reported confidence. The response always states which mode produced it; the two are
+ *       never blended into one number without saying which is which. `userProvided` always echoes
+ *       back whatever real fields the user has actually set (even criticalityRating/dependencyNotes
+ *       alone, without a dollar figure), regardless of which mode the dollar estimate used. Not
+ *       available in demo mode.
+ *     tags: [Scenario Simulator]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Business impact, real or AI-estimated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       500:
+ *         description: The Gemini call failed or returned an unparseable response (AI-estimate mode only) - never silently reported as success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/:id/business-impact', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Business impact is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+  const impact = await computeBusinessImpact(supplier);
+  return sendSuccess(res, impact);
 }));
 
 module.exports = router;
