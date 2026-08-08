@@ -16,6 +16,7 @@ import RiskHealthTrendChart from '../components/RiskHealthTrendChart';
 import ConfidenceBadge from '../components/ConfidenceBadge';
 import AlertBanner from '../components/AlertBanner';
 import ForecastPanel from '../components/ForecastPanel';
+import ScenarioSimulatorPanel from '../components/ScenarioSimulatorPanel';
 
 const CATEGORY_OPTIONS = ['raw_material', 'logistics', 'saas', 'other'];
 
@@ -78,6 +79,10 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
   const [riskHistory, setRiskHistory] = useState([]);
   const [healthHistory, setHealthHistory] = useState([]);
   const [forecast, setForecast] = useState(null);
+
+  const [simulation, setSimulation] = useState(null);
+  const [simulating, setSimulating] = useState(false);
+  const [simulationError, setSimulationError] = useState('');
 
   const isAdmin = user?.role === 'admin';
   const lastRiskChange = timeline.find((event) => event.type === 'risk_changed');
@@ -217,6 +222,19 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
       setLogisticsError(requestError?.response?.data?.error?.message || 'Unable to refresh logistics data.');
     } finally {
       setLogisticsRefreshing(false);
+    }
+  };
+
+  const handleRunSimulation = async () => {
+    setSimulating(true);
+    setSimulationError('');
+    try {
+      const response = await api.post(`/suppliers/${supplierId}/simulate-failure`);
+      setSimulation(response.data.data);
+    } catch (requestError) {
+      setSimulationError(requestError?.response?.data?.error?.message || 'Unable to run simulation.');
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -481,6 +499,16 @@ export default function SupplierDetail({ supplierId, user, onBack, onChanged }) 
           subtitle="A hand-rolled linear projection from this supplier's own history - not a guarantee, and honestly gated below a minimum real, time-spread sample."
           forecast={forecast}
         />
+
+        <section className="rounded-[20px] p-5 bg-violet-50/60 border border-violet-300/40">
+          <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Scenario Simulator</h2>
+          <ScenarioSimulatorPanel
+            simulation={simulation}
+            onRunSimulation={handleRunSimulation}
+            simulating={simulating}
+            simulationError={simulationError}
+          />
+        </section>
 
         <section className="rounded-[20px] p-5 bg-white/75 border border-slate-400/35">
           <h2 className="mt-0 mb-3 text-[1.1rem] text-slate-900">Snapshots</h2>
