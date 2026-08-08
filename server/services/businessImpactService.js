@@ -19,9 +19,15 @@ const buildRealImpact = (businessImpact) => {
   const annualSpend = toNumberOrNull(businessImpact.estimatedAnnualSpend);
   const dailySpendRate = annualSpend !== null ? Math.round((annualSpend / DAYS_PER_YEAR) * 100) / 100 : null;
 
+  // Explicit 'en-US' locale - toLocaleString() with no locale argument uses
+  // the server process's own locale (found live: this server defaults to
+  // Indian digit grouping, e.g. "5,00,000" instead of "500,000"), which has
+  // nothing to do with the caller's actual locale and would silently
+  // misrender every currency figure this service produces.
+  const fmt = (n) => n.toLocaleString('en-US');
   const parts = [];
-  if (contractValue) parts.push(`${contractValue.amount.toLocaleString()} ${contractValue.currency} total contract value on file`);
-  if (annualSpend !== null) parts.push(`${annualSpend.toLocaleString()} estimated annual spend (~${dailySpendRate.toLocaleString()}/day)`);
+  if (contractValue) parts.push(`${fmt(contractValue.amount)} ${contractValue.currency} total contract value on file`);
+  if (annualSpend !== null) parts.push(`${fmt(annualSpend)} estimated annual spend (~${fmt(dailySpendRate)}/day)`);
   const summary = `Calculated directly from real figures you entered: ${parts.join('; ')}.`;
 
   return {
