@@ -217,15 +217,30 @@ Full pass/fail verification of all of the above is in [Phase 5 Complete — End-
 
 ---
 
-# Remaining Work — Phase 6 (Predictive Analytics)
+# Remaining Work — Phase 6 (Predictive Analytics) — ✅ COMPLETE (2026-08-08)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Risk Forecasting | Predict future supplier risk using historical trends. |
-| 🔴 | Anomaly Detection | Detect unusual supplier behavior and operational anomalies. |
-| 🔴 | Trend Analysis | Visualize long-term supplier performance trends. |
-| 🔴 | Early Warning System | Notify users before supplier risk becomes critical. |
-| 🔴 | Predictive Dashboard | Display future supplier health projections and confidence intervals. |
+| 🟢 | Risk Forecasting | Hand-rolled linear regression (`forecastService.js`, no new dependency) over real `{timestamp, score}` history, per-supplier (`GET /suppliers/:id/forecast`) and portfolio-wide (`GET /org/forecast`, pools every supplier's raw `SupplierSnapshot` rows for the fit). Gated on ≥5 real points spanning ≥24 real hours - an explicit `insufficient_data` status otherwise, never a hidden zero. |
+| 🟢 | Predictive Dashboard | New `ForecastChart`/`ForecastPanel` components: solid historical line → dashed projected line + shaded confidence band that visibly widens with less data/longer horizon. Reused identically on the dashboard (portfolio) and supplier detail (per-supplier) pages; the insufficient-data state renders as real, labeled text ("Not enough history yet... N collected, M needed"), never a blank/spinner. |
+| 🟢 | Early Warning System | `evaluateProjectedBreach` (`alertService.js`) compares each forecast's projected value against the org's existing `RiskConfig.alertThresholds` - reused, not duplicated. Excludes a metric already breaching today (Phase 5's job). Surfaced as a new amber tier in the existing `AlertBanner`/`ActiveAlertsPanel`. |
+| 🟢 | Anomaly Detection | `anomalyService.js`: a compounding-delta detector (rolling 14-day sum, catches several small changes Phase 5's own ±15 cap alone wouldn't) and a sentiment pattern-shift detector hard-capped at 7 days to match `NewsCache`'s actual TTL. Both exclude a window already flagged elsewhere. Surfaced as a third, violet tier on the same alert components. |
+| 🟢 | Trend Analysis | A regression-line overlay added to the *existing* `RiskHealthTrendChart.jsx` (Phase 5), reconstructing the exact fitted line the forecast panel itself computed (shared `intercept`/`anchorTimestamp`) rather than a second, potentially-divergent fit. Portfolio historical trend reuses Step 1's `GET /org/forecast` `historical` field - no duplicate aggregation endpoint. |
+
+See [Phase 6 Complete — End-to-End Smoke Test](#-phase-6-complete--end-to-end-smoke-test-2026-08-08) below for the full verification results.
+
+## Phase 6 — Technical Summary
+
+**Starting point: the Phase 6 audit's own finding that real per-supplier history is extremely thin** - at most a handful of `RiskHistory` rows per supplier, several clustered within milliseconds of each other from earlier test scripts, not organically calendar-spread. This shaped every design decision in the phase: honesty about data sufficiency, not forecast sophistication, was treated as the actual deliverable.
+
+- **Forecasting** - a hand-rolled OLS linear regression over `{t: days-since-first-point, y: score}`, deliberately not a real time-series library; with this little real data, anything with more free parameters than points would be actively misleading. Two independent sufficiency gates (`MIN_POINTS = 5` **and** `MIN_SPAN_HOURS = 24`) reuse the audit's own burst-detection logic, so a cluster of same-instant rows can never pass by count alone. The confidence interval widens for sparser samples and longer projection horizons, and `confidenceLevel` is deliberately capped at `'medium'`, never `'high'`, regardless of how much data accumulates within what this phase can validate.
+- **Portfolio pooling design pivot** - the first design day-bucketed every supplier's snapshots into daily averages for the regression fit; live testing showed this collapsed even a data-rich org (25 real rows) down to 2-3 points, wrongly failing sufficiency. Switched to pooling **raw, un-bucketed** points across every supplier in the org for the actual fit (an org with 20 suppliers snapshotted twice yields 40 real points, not 2), while keeping a separate day-bucketed series purely for chart display, since a scatter of raw cross-supplier points is unreadable as a trend line.
+- **Predictive dashboard** - a real bug was found and fixed via a live screenshot, not just a passing text check: recharts builds a shared category `XAxis` in JSX declaration order (not by sorting label values), so declaring the future-projecting `<Area>`/dashed `<Line>` before the historical line scrambled the axis into non-chronological order. Fixed by always declaring the historical series first.
+- **Early warning & anomaly detection** - both new alert types deliberately exclude anything already caught by a more specific mechanism: a projected breach never fires for a metric already breaching today, and a compounding-drift window never fires if it already contains one single change large enough to have tripped Phase 5's own significant-change cap. Both surface through the *same* `AlertBanner`/`ActiveAlertsPanel` components (new props, new color-coded sections) rather than a third notification surface - three tiers now share one place: red (confirmed), amber (projected), violet (anomaly).
+- **Trend overlay** - `forecastFromPoints` now exposes `trend.intercept` and `trend.anchorTimestamp` specifically so `RiskHealthTrendChart.jsx`'s overlay can reconstruct the *exact* line the forecast panel computed via `intercept + slope * daysSince(anchorTimestamp)`, even when displaying a different subset of points - guaranteeing the two views can never silently disagree.
+- **Org-scoping** - `GET /suppliers/:id/forecast` and `GET /org/forecast` both explicitly cross-org tested (404, not leaked), continuing the standing discipline from every prior phase.
+
+Full pass/fail verification is in [Phase 6 Complete — End-to-End Smoke Test](#-phase-6-complete--end-to-end-smoke-test-2026-08-08); open items (data-sufficiency thresholds as future config, the sentiment 7-day TTL ceiling, unbenchmarked dashboard-wide scan cost) are tracked in `TODO.md`.
 
 ---
 
@@ -510,6 +525,47 @@ Non-obvious calls made during Phase 5, kept here so the reasoning isn't lost onc
 - **No scheduled cron checks for threshold breaches.** Alert state is computed fresh from the supplier's current persisted score on every read (`twinService.js`, `GET /dashboard/stats`) - there's no staleness window a periodic re-check would close. A cron would only add value paired with a push notification channel (email/SMS) to fire from at the moment of breach, which doesn't exist yet (`TODO.md`).
 - **Found and fixed a real snapshot-labeling precedence bug:** when a change was simultaneously a large (capped) swing and a fresh threshold crossing, the original `if (significant) {...} else if (breach) {...}` ordering always labeled the snapshot `'significant_change'`, silently losing the more decision-relevant `'threshold_breach'` fact. Fixed by checking the breach condition first. (`server/services/twinSyncService.js`)
 - **Default alert thresholds (risk ≥70, health ≤30) were chosen to match `RiskBadge`/`HealthBadge`'s existing red-zone cutoffs**, not arbitrary new numbers, so a breach lines up with what a user already reads as "red" on the badge.
+
+---
+
+# ✅ Phase 6 Complete — End-to-End Smoke Test (2026-08-08)
+
+Every item from the Phase 6 plan above (risk forecasting, predictive dashboard, early warning system, anomaly detection, trend analysis) has been implemented and verified against real Atlas data - not just code review. Unlike prior phases, most individual verifications *correctly* return an honest `insufficient_data` result today, since real per-supplier history is still thin; that's the expected, working behavior this phase was built to produce, not a shortfall.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Per-supplier forecast honestly abstains for real suppliers without enough history | 🟢 PASS | Confirmed against real current suppliers - most/all correctly return `insufficient_data` with the real point count/span and what was required |
+| 2 | Burst-detection refuses a same-instant test-script cluster | 🟢 PASS | Reused the audit's own "4 `RiskHistory` rows in 0.03s" finding as the refusal case; `MIN_SPAN_HOURS` gate rejects it even though `MIN_POINTS` alone would pass |
+| 3 | Portfolio forecast returns a real, non-insufficient number | 🟢 PASS | Raw-point pooling across every supplier's `SupplierSnapshot` rows produced a genuine `'ok'` result, after the day-bucketed-average first design was found (live) to wrongly fail sufficiency |
+| 4 | Predictive dashboard panel renders a real confidence band that visibly widens | 🟢 PASS | Portfolio `<Area>`/`<Line>` band, sparser/further-out projections visibly wider |
+| 5 | Per-supplier insufficient-data state renders as real, clear UI text | 🟢 PASS | "Not enough history yet... N collected, M needed" with real numbers, never blank/spinner |
+| 6 | Chart X-axis stays chronological with a projected series present | 🟢 PASS | Found and fixed a real bug first (see below) - re-verified via screenshot after moving the historical `<Line>` to declare first |
+| 7 | Early warning correctly abstains for insufficient-data suppliers | 🟢 PASS | Unit-tested (4 cases) plus confirmed live - the more important case given today's real data reality |
+| 8 | Early warning fires at the correct horizon where enough real history exists | 🟢 PASS | Unit-tested against a realistic synthetic point array covering the exact crossing logic |
+| 9 | Early warning excludes a metric already reactively breaching today | 🟢 PASS | Unit-tested exclusion path; Phase 5's reactive alert and Phase 6's projected alert never double-report the same metric |
+| 10 | Anomaly detection abstains on insufficient window data, zero false positives on real data | 🟢 PASS | Live-scanned 43 suppliers with recent `RiskHistory` activity: 70 insufficient_data, 16 evaluated-and-correctly-not-detected, 0 false positives; all suppliers with recent news also 0 false positives on sentiment shift |
+| 11 | Anomaly detection excludes a window already caught by Phase 5's significant-change cap | 🟢 PASS | Unit-tested (9 cases total) exclusion path |
+| 12 | Trend-line overlay reconstructs the exact forecast-panel regression line, gated per-metric | 🟢 PASS | Verified live against a real qualifying supplier - legend correctly showed "Risk trend (fitted)" while correctly omitting a health trend line (health forecast still `insufficient_data` for that supplier) |
+| 13 | Cross-org access blocked on every new endpoint | 🟢 PASS | `/suppliers/:id/forecast`, `/org/forecast`, and the `/suppliers/:id/twin` fields they feed all correctly 404/scope for a second org |
+| 14 | Phase 5's existing reactive alerts still work unchanged alongside the new predictive/anomaly tiers | 🟢 PASS | Fresh org: real reactive breach banner fired correctly, with correctly zero false early-warning/anomaly sections since no predictive data existed yet |
+| 15 | Full smoke run, zero console errors (Playwright), including every insufficient-data state | 🟢 PASS | Dashboard, supplier detail, forecast panels, all three alert tiers exercised together in one pass |
+
+All synthetic test data (orgs, suppliers, forecasts, alerts) created during this phase's own testing was cleaned from Atlas after every pass. A separate, broader DB-wide audit on 2026-08-08 additionally found 23 **older** leftover test orgs from Phase 5's own `test_step1-5_*.js` scripts, which had never had a cleanup step written at all (unlike Phase 3 and earlier). 22 were deleted; one was kept on purpose as a permanent fixture - see the note under Phase 6's roadmap table above and `TODO.md` section 5.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 6, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Minimum-data thresholds (`MIN_POINTS = 5`, `MIN_SPAN_HOURS = 24`) are hard-coded, not per-org configurable, and deliberately conservative.** Chosen to comfortably reject the exact burst pattern the audit found while still firing on genuinely time-spread real data. Not exposed as an org setting because there's no product signal yet for what a "looser" or "stricter" org would even want.
+- **`confidenceLevel` is capped at `'medium'`, never `'high'`, in this version - deliberately, not a placeholder.** A hand-rolled regression over at most a few dozen points, on a hand-tuned 0-100 score, should never claim high confidence regardless of how much data accumulates within what this phase can validate.
+- **Portfolio forecasting pools raw `SupplierSnapshot` rows, not a day-bucketed average, for the regression fit.** The day-bucketed design was tried first and rejected after live testing showed it collapsed a data-rich org (25 real rows) down to 2-3 points, wrongly failing sufficiency. The day-bucketed average is still computed and returned separately, display-only, since a scatter of raw cross-supplier points is unreadable as a trend line.
+- **Found and fixed a real recharts axis-ordering bug during live UI testing, not code review:** with a shared category `XAxis` and `allowDuplicatedCategory={false}`, recharts builds the axis in JSX declaration order, not by sorting label values - declaring the future-projecting `<Area>`/dashed `<Line>` before the historical line scrambled the axis into non-chronological order. Fixed by always declaring the historical series first.
+- **Both new alert types (projected breach, anomaly) explicitly exclude anything already caught by a more specific mechanism** - a projected breach never fires for a metric already breaching today, and a compounding-drift window never fires if it already contains one change large enough to have tripped Phase 5's own significant-change cap. Deliberate non-overlap: re-reporting an already-known problem under a second alert type would dilute signal, not add it.
+- **Sentiment pattern-shift detection can structurally never look back further than 7 days**, because `NewsCache.publishedAt` has a hard 7-day MongoDB TTL - articles are actually deleted, not filtered. Not a tunable parameter of `anomalyService.js`; a ceiling imposed by a schema decision three phases earlier.
+- **The "fires correctly on a genuine real-trigger crossing" test case for early warning and compounding drift could not be produced within this build session** - both require real data spread across real hours/days that a live session can't fabricate by waiting. Verified instead via unit tests against realistic synthetic point arrays, plus a full scan of every real supplier with enough history to evaluate, confirming zero false positives and correct abstention given today's actual trends. Expected to resolve itself through real ongoing usage, not a gap to close artificially (`TODO.md`).
+- **A DB-wide test-data audit found the Phase 5/6 leftover-account problem was systemic, not isolated** - every account in the database traced back to test registrations, and Phase 5's own `test_step1-5_*.js` scripts had no matching cleanup step at all (unlike Phase 3 and earlier). One org was deliberately kept as a permanent fixture rather than deleted, since it's the only currently-existing example of real data that clears `forecastService.js`'s sufficiency gates on both risk and health - see `TODO.md` section 5.
 
 ---
 
