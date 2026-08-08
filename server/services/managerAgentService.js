@@ -32,13 +32,27 @@ const { analyzeLogistics } = require('./logisticsAgentService');
 // so even if Gemini's prose ever slipped, the response's structured data
 // still honestly labels what each agent actually is.
 exports.generateManagerSummary = async (supplier) => {
-  const [risk, legal, finance, esg, logistics] = await Promise.all([
+  // Risk/legal/finance never mutate `supplier`, so they run concurrently.
+  // ESG and Logistics both CAN write to and save() this same in-memory
+  // supplier document (only on a cold first fetch - see esgAgentService.js/
+  // logisticsAgentService.js's persistence fix) - run them sequentially
+  // relative to each other rather than via the same Promise.all, so two
+  // concurrent .save() calls on one document instance are never in flight
+  // at once. An intermittent 500 was observed during manual testing under
+  // 4-5 simultaneous Gemini calls; an isolated repro attempt at the
+  // concurrent-save path itself didn't reproduce it deterministically
+  // (Mongoose appears to internally queue same-document saves), so the
+  // root cause is more likely a transient Gemini-side hiccup - but
+  // sequencing these two removes the theoretical race regardless, at the
+  // cost of one extra sequential await only on a supplier's first-ever
+  // Manager Agent run.
+  const [risk, legal, finance] = await Promise.all([
     analyzeRisk(supplier),
     analyzeLegalDocuments(supplier),
     analyzeFinance(supplier),
-    analyzeEsg(supplier),
-    analyzeLogistics(supplier),
   ]);
+  const esg = await analyzeEsg(supplier);
+  const logistics = await analyzeLogistics(supplier);
 
   const legalSection = legal.status === 'ok'
     ? `${legal.summary}\n${legal.findings.map((f) => `- [${f.topic}] ${f.finding}`).join('\n')}`
