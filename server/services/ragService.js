@@ -54,28 +54,39 @@ const runVectorSearchWithRetry = async (supplierId, queryVector) => {
 // than truncating mid-exchange after every single question.
 const HISTORY_WINDOW = 8;
 
-// history is the conversation's prior turns (this question is not in it yet) -
-// used so a follow-up like "why is it that high?" can resolve against what was
-// just discussed, not just the freshly retrieved document chunks.
-exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
-  // 1. Convert user question to an embedding
-  const questionEmbedding = await getEmbeddings(question);
-
-  // 2. Perform Vector Search in MongoDB (Filtered by supplierId), retrying on
-  // a true zero-result response to ride out Atlas Search's indexing lag
-  const contextChunks = await runVectorSearchWithRetry(supplierId, questionEmbedding);
+// Embeds a query, runs the retry-on-zero-result vector search, and resolves
+// real source filenames - the shared retrieval step behind both free-form
+// Q&A below and the Legal Agent's structured extraction (Phase 8 Step 2),
+// which needs the exact same real, org/supplier-scoped chunk retrieval but
+// with a different downstream prompt. Extracted so the Legal Agent reuses
+// this real retrieval logic rather than re-implementing $vectorSearch.
+exports.retrieveRelevantChunks = async (supplierId, query) => {
+  const queryEmbedding = await getEmbeddings(query);
+  const contextChunks = await runVectorSearchWithRetry(supplierId, queryEmbedding);
 
   if (contextChunks.length === 0) {
-    return { answer: "I couldn't find any information in the uploaded documents to answer that.", sources: [] };
+    return { chunks: [], sources: [] };
   }
 
-  // Distinct source filenames the answer is grounded in, for the "sources"
-  // shown alongside the assistant's message.
   const docIds = [...new Set(contextChunks.map((c) => String(c.docId)).filter(Boolean))];
   const sourceDocs = docIds.length
     ? await Document.find({ _id: { $in: docIds } }, 'fileName').lean()
     : [];
-  const sources = sourceDocs.map((d) => d.fileName);
+
+  return { chunks: contextChunks, sources: sourceDocs.map((d) => d.fileName) };
+};
+
+// history is the conversation's prior turns (this question is not in it yet) -
+// used so a follow-up like "why is it that high?" can resolve against what was
+// just discussed, not just the freshly retrieved document chunks.
+exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
+  // 1-2. Embed the question and retrieve real, relevant chunks (with source
+  // filenames) via the shared retrieval helper above.
+  const { chunks: contextChunks, sources } = await exports.retrieveRelevantChunks(supplierId, question);
+
+  if (contextChunks.length === 0) {
+    return { answer: "I couldn't find any information in the uploaded documents to answer that.", sources: [] };
+  }
 
   // 3. Build the Prompt
   const contextText = contextChunks.map(c => c.text).join("\n\n");
