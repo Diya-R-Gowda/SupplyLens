@@ -6,6 +6,7 @@ import Button from '../components/Button';
 import DashboardOverview from '../components/DashboardOverview';
 import RiskConfigPanel from '../components/RiskConfigPanel';
 import ForecastPanel from '../components/ForecastPanel';
+import PortfolioTimelinePage from '../components/PortfolioTimelinePage';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -24,6 +25,10 @@ export default function Dashboard({ user, onLogout }) {
   const [error, setError] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  // Phase 9 - null | 'timeline' | 'map' | 'heatmap' | 'concentration'.
+  // A single string rather than one boolean per view - these 4 pages are
+  // mutually exclusive with each other and with settings/selectedSupplier.
+  const [activeVisualization, setActiveVisualization] = useState(null);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -139,6 +144,8 @@ export default function Dashboard({ user, onLogout }) {
           onBack={() => setSelectedSupplier(null)}
           onChanged={handleSupplierChanged}
         />
+      ) : activeVisualization === 'timeline' ? (
+        <PortfolioTimelinePage onBack={() => setActiveVisualization(null)} />
       ) : (
         <>
           <div className="flex items-start justify-between gap-4">
@@ -156,6 +163,12 @@ export default function Dashboard({ user, onLogout }) {
                 Sign out
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setActiveVisualization('timeline')} className="rounded-full px-3.5 py-2 text-[0.85rem]">
+              Portfolio timeline
+            </Button>
           </div>
 
           <DashboardOverview stats={stats} loading={statsLoading} error={statsError} onOpenSupplier={setSelectedSupplier} />

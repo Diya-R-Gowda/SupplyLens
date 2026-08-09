@@ -2,7 +2,10 @@ import Card from './Card';
 import Badge from './Badge';
 import { FileText, Newspaper, TrendingUp, HeartPulse, PlusCircle, Pencil, Activity } from 'lucide-react';
 
-const EVENT_META = {
+// Exported so PortfolioTimeline.jsx (Phase 9 Step 1) reuses this exact
+// event-type styling/description logic rather than duplicating it - the
+// portfolio view only needs to add a per-event supplier-name tag on top.
+export const EVENT_META = {
   supplier_created: { label: 'Created', icon: PlusCircle, badgeClass: 'bg-blue-100 text-blue-700' },
   supplier_updated: { label: 'Updated', icon: Pencil, badgeClass: 'bg-slate-200 text-slate-700' },
   document_uploaded: { label: 'Document', icon: FileText, badgeClass: 'bg-indigo-100 text-indigo-700' },
@@ -11,7 +14,7 @@ const EVENT_META = {
   health_changed: { label: 'Health change', icon: HeartPulse, badgeClass: 'bg-emerald-100 text-emerald-800' },
 };
 
-const describeEvent = (event) => {
+export const describeEvent = (event) => {
   switch (event.type) {
     case 'supplier_created':
       return 'Supplier record created';

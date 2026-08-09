@@ -30,6 +30,7 @@ const options = {
       { name: 'Forecasting', description: 'Phase 6 - hand-rolled linear-regression forecasts (per-supplier and portfolio-level), gated on real data sufficiency.' },
       { name: 'Scenario Simulator', description: 'Phase 7 - failure simulation, AI mitigation strategies, alternative-supplier recommendations, business impact, and recovery planning. Every endpoint explicitly labels output as real-data-derived or AI-estimated - never blended silently.' },
       { name: 'Agents', description: 'Phase 8 - persona-focused synthesis/extraction over existing real data (there is no multi-step tool-calling framework in this app - "agent" means a scoped Gemini call, per the Phase 8 audit in CONTRIBUTING.md). Each endpoint\'s docs state plainly whether it is genuine synthesis/extraction, a focused-lens restatement of existing Phase 4 data, or a hardcoded abstention on a claim with no real data source.' },
+      { name: 'Visualization', description: 'Phase 9 - portfolio-wide visualizations over real data, each endpoint stating its actual granularity/basis plainly. No supplier-to-supplier relationship data or geographic coordinates exist anywhere in this schema (per the Phase 9 audit in CONTRIBUTING.md) - the concentration graph below visualizes real category/country/similarity relationships, never described as a supply-chain dependency graph; the map/heatmap are country-level approximations, never implying precise supplier locations.' },
     ],
     components: {
       securitySchemes: {

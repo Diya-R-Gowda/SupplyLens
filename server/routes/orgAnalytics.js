@@ -5,8 +5,12 @@ const auth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 const { getPortfolioForecast } = require('../services/predictiveAnalyticsService');
+const { getPortfolioTimeline } = require('../services/portfolioTimelineService');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
+
+const DEFAULT_TIMELINE_LIMIT = 150;
+const MAX_TIMELINE_LIMIT = 500;
 
 /**
  * @swagger
@@ -42,6 +46,61 @@ router.get('/forecast', auth, asyncHandler(async (req, res) => {
 
   const forecast = await getPortfolioForecast(req.user.orgId);
   return sendSuccess(res, forecast);
+}));
+
+/**
+ * @swagger
+ * /org/timeline:
+ *   get:
+ *     summary: Phase 9 Step 1 - portfolio-wide timeline, merging every supplier's real events into one chronological feed
+ *     description: >
+ *       Genuinely new, not a restatement of `GET /suppliers/{id}/timeline` (Phase 4, still the
+ *       right place for a single supplier's history) - this pools the same 5 real event types
+ *       (created/updated, document uploaded, news mentioned, risk changed, health changed) across
+ *       every supplier in the org into one merged, supplier-tagged, most-recent-first feed, the same
+ *       "pool across suppliers for a real portfolio view" precedent as Phase 6's `GET /org/forecast`.
+ *       No true pagination across the merged multi-collection result - `days` bounds the underlying
+ *       queries, `limit` caps the response, and `truncated`/`totalEvents` say honestly whether more
+ *       real events exist beyond what's returned. Not available in demo mode.
+ *     tags: [Visualization]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: supplierId
+ *         schema: { type: string }
+ *         description: Optional - restrict to one supplier's events (still via this portfolio endpoint, for a consistent shape). A supplierId outside the caller's org returns an honestly-empty result, not an error.
+ *       - in: query
+ *         name: days
+ *         schema: { type: integer }
+ *         description: Only include events from the last N days (applied before merging).
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 150, maximum: 500 }
+ *         description: Max events returned after merging and sorting, most recent first.
+ *     responses:
+ *       200:
+ *         description: Merged, supplier-tagged event feed plus totalEvents/truncated so the caller knows if more exist
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ */
+router.get('/timeline', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, {
+      events: [], totalEvents: 0, suppliersIncluded: 0, truncated: false,
+    });
+  }
+
+  const days = parseInt(req.query.days, 10);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_TIMELINE_LIMIT, 1), MAX_TIMELINE_LIMIT);
+
+  const result = await getPortfolioTimeline(req.user.orgId, {
+    supplierId: req.query.supplierId || undefined,
+    days: Number.isFinite(days) && days > 0 ? days : undefined,
+    limit,
+  });
+  return sendSuccess(res, result);
 }));
 
 module.exports = router;
