@@ -31,8 +31,16 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().finally(() => {
-	app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-	newsCron.start();
-	snapshotCron.start();
-});
+// Only actually connect/listen/schedule cron jobs when this file is run
+// directly (node index.js / nodemon) - not when required as a module, which
+// is how the Jest test suite imports `app` to drive it via supertest without
+// touching the real Atlas cluster or starting background cron jobs.
+if (require.main === module) {
+	connectDB().finally(() => {
+		app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+		newsCron.start();
+		snapshotCron.start();
+	});
+}
+
+module.exports = app;
