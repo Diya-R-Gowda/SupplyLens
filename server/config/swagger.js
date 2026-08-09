@@ -20,6 +20,7 @@ const options = {
     },
     servers: [{ url: '/api', description: 'Same-origin API base path' }],
     tags: [
+      { name: 'Health', description: 'Phase 10 - unauthenticated liveness/DB-connectivity checks for monitoring and load balancers.' },
       { name: 'Auth', description: 'Registration, login, token refresh, and logout.' },
       { name: 'Suppliers', description: 'Org-scoped supplier CRUD, search, filtering, and pagination.' },
       { name: 'Dashboard', description: 'Aggregated supplier statistics for the dashboard UI.' },
