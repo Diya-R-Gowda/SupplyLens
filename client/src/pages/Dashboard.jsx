@@ -7,6 +7,7 @@ import DashboardOverview from '../components/DashboardOverview';
 import RiskConfigPanel from '../components/RiskConfigPanel';
 import ForecastPanel from '../components/ForecastPanel';
 import PortfolioTimelinePage from '../components/PortfolioTimelinePage';
+import GeographicMapPage from '../components/GeographicMapPage';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -146,6 +147,8 @@ export default function Dashboard({ user, onLogout }) {
         />
       ) : activeVisualization === 'timeline' ? (
         <PortfolioTimelinePage onBack={() => setActiveVisualization(null)} />
+      ) : activeVisualization === 'map' ? (
+        <GeographicMapPage onBack={() => setActiveVisualization(null)} />
       ) : (
         <>
           <div className="flex items-start justify-between gap-4">
@@ -168,6 +171,9 @@ export default function Dashboard({ user, onLogout }) {
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setActiveVisualization('timeline')} className="rounded-full px-3.5 py-2 text-[0.85rem]">
               Portfolio timeline
+            </Button>
+            <Button onClick={() => setActiveVisualization('map')} className="rounded-full px-3.5 py-2 text-[0.85rem]">
+              Geographic map
             </Button>
           </div>
 
