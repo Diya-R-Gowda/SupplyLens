@@ -8,6 +8,7 @@ const { getPortfolioForecast } = require('../services/predictiveAnalyticsService
 const { getPortfolioTimeline } = require('../services/portfolioTimelineService');
 const { getSupplierLocations } = require('../services/geoLocationService');
 const { getRiskHeatmap } = require('../services/riskHeatmapService');
+const { getConcentrationGraph } = require('../services/concentrationGraphService');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
 
@@ -168,6 +169,47 @@ router.get('/risk-heatmap', auth, asyncHandler(async (req, res) => {
   }
 
   const result = await getRiskHeatmap(req.user.orgId);
+  return sendSuccess(res, result);
+}));
+
+/**
+ * @swagger
+ * /org/concentration-graph:
+ *   get:
+ *     summary: Phase 9 Step 4 - Concentration & Redundancy View - NOT a supply-chain dependency graph
+ *     description: >
+ *       **This is explicitly not a supply-chain/dependency graph.** No parent/child, upstream/
+ *       downstream, or supplier-tiering data exists anywhere in this app's schema (confirmed by the
+ *       Phase 9 pre-build audit) - a graph implying that kind of relationship would misrepresent what
+ *       the data actually means. Every node is a real supplier; every edge is one of exactly two real,
+ *       traceable relationships: (1) a same-category pair, weighted by `similarityService.js`'s real
+ *       cross-supplier scoring (the same function Phase 7's Alternative Supplier Recommendations
+ *       already uses - reused, not duplicated), or (2) a same-country-but-different-category pair, a
+ *       plain grouping fact with no score. `isSoleCategorySource`/`isSoleCountrySource` per node use
+ *       the exact same definition as Phase 7's `simulationService.computeConcentrationRisk` - the
+ *       most actionable real insight this view can surface. Not available in demo mode.
+ *     tags: [Visualization]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Graph-shaped nodes/edges, every edge traceable to a stated real reason
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ */
+router.get('/concentration-graph', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, {
+      label: 'Concentration & Redundancy View',
+      scope: 'Visualizes real category/country grouping and similarity-score proximity between suppliers already in your org - NOT a supply-chain dependency graph.',
+      nodes: [],
+      edges: [],
+      soleSourceCount: 0,
+    });
+  }
+
+  const result = await getConcentrationGraph(req.user.orgId);
   return sendSuccess(res, result);
 }));
 

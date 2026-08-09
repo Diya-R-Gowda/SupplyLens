@@ -76,6 +76,13 @@ const scoreCandidate = (target, targetFlags, candidate, candidateFlags) => {
   return { score: Math.round(score * 10) / 10, comparedOn };
 };
 
+// Exported for concentrationGraphService.js (Phase 9 Step 4), which needs
+// pairwise scoring across every same-category pair in the org at once,
+// rather than one target-supplier's ranked alternative list at a time -
+// same real scoring logic, reused rather than duplicated.
+exports.scoreCandidate = scoreCandidate;
+exports.buildAssessmentFlags = buildAssessmentFlags;
+
 exports.findAlternativeSuppliers = async (supplier) => {
   if (!supplier.category) {
     return {
