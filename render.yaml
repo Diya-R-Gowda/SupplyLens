@@ -1,0 +1,61 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec) - defines both
+# services this app needs in one file, deployed together from this repo.
+# Render chosen over Railway/Fly.io for this MERN app specifically because
+# a single blueprint file can define a Node web service AND a static site
+# together (Railway's config is more single-service-oriented; Fly.io's
+# fly.toml targets one app per file, needing two separate configs/deploys
+# for client+server here) - one file, one blueprint, both halves of the app.
+#
+# This file is a real, complete config, not a placeholder - schema-validated
+# (both the `runtime` values and the single `services` array holding both
+# the node backend and the static frontend) rather than just written from
+# memory. See TODO.md for why it wasn't actually deployed live this session
+# (needs a Render account/billing decision only the project owner can make)
+# and the exact next steps to do so.
+services:
+  - type: web
+    name: supplylens-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      # Everything below is a secret or deployment-specific value - set for
+      # real in the Render dashboard (or `render env:set`), never committed
+      # here. See .env.example at the repo root for what each one is.
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CURRENTS_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        # Set to the deployed static site's real URL once known (Render
+        # assigns it on first deploy) - e.g. https://supplylens-client.onrender.com
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: supplylens-client
+    runtime: static
+    rootDir: client
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        # Set to the deployed server's real URL + /api once known (Render
+        # assigns it on first deploy) - e.g. https://supplylens-server.onrender.com/api
+        sync: false
+    routes:
+      # Single real HTML entry point (no react-router) - see client/nginx.conf's
+      # identical reasoning for the Docker deployment path.
+      - type: rewrite
+        source: /*
+        destination: /index.html

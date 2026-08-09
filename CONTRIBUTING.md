@@ -748,22 +748,22 @@ npm install
 
 ## Configure Environment Variables
 
-Create
-
-```
-server/.env
-```
-
-Example
+Copy `.env.example` (repo root) to `.env` (repo root, NOT `server/.env` -
+`server/index.js` loads it from `../.env` relative to itself) and fill in
+real values. See `.env.example` itself for what each one is and does when
+left unset - this list was previously out of date (missing `CURRENTS_API_KEY`
+entirely and calling the Gemini key `GOOGLE_API_KEY`, which the code has
+never actually read) and is now kept in sync with server/index.js's real
+`process.env.*` usage as of Phase 10.
 
 ```env
 PORT=5000
-
 MONGO_URI=your_mongodb_connection_string
-
 JWT_SECRET=your_jwt_secret
-
-GOOGLE_API_KEY=your_google_api_key
+GEMINI_API_KEY=your_gemini_api_key
+CURRENTS_API_KEY=your_currents_api_key
+CORS_ORIGIN=
+LOG_LEVEL=
 ```
 
 ---
