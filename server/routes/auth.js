@@ -1,14 +1,39 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
+const { body } = require('express-validator');
 const User = require('../models/User');
 const Supplier = require('../models/Supplier');
 const Organisation = require('../models/Organisation');
 const { registerDemoUser, findDemoUser, getDemoUserById } = require('../services/demoStore');
 const { issueTokenPair, consumeRefreshToken, revokeRefreshToken } = require('../services/tokenService');
+const { authLimiter } = require('../middleware/rateLimit');
+const validate = require('../middleware/validate');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
+
+// `.optional()` throughout: an entirely missing field is still caught by the
+// existing manual `!email || !password` check below (CREDENTIALS_REQUIRED) -
+// these only add real, previously-missing coverage for a field that IS
+// present but malformed (not a valid email shape, or too short to be a
+// real password), which used to reach bcrypt/the DB unchecked.
+const registerValidation = [
+  body('email').optional().trim().isEmail().withMessage('Must be a valid email address'),
+  body('password').optional().isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+];
+
+const loginValidation = [
+  body('email').optional().trim().isEmail().withMessage('Must be a valid email address'),
+];
+
+// Loose on purpose (crypto.createHash() on a non-string throws, so this
+// avoids that turning into an uncaught 500) - not re-validating token
+// *format* since that's an internal implementation detail, not user input
+// shape.
+const refreshTokenValidation = [
+  body('refreshToken').optional().isString().withMessage('refreshToken must be a string'),
+];
 
 const router = express.Router();
 
@@ -93,7 +118,7 @@ const buildAuthPayload = async (user, demo) => {
  *               success: false
  *               error: { message: An account with this email already exists, code: EMAIL_TAKEN }
  */
-router.post('/register', asyncHandler(async (req, res) => {
+router.post('/register', authLimiter, validate(registerValidation), asyncHandler(async (req, res) => {
 	const { email, password } = req.body;
 	if (!email || !password) {
 		throw new ApiError('Email and password are required', 400, 'CREDENTIALS_REQUIRED');
@@ -179,7 +204,7 @@ router.post('/register', asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Invalid credentials, code: INVALID_CREDENTIALS }
  */
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', authLimiter, validate(loginValidation), asyncHandler(async (req, res) => {
 	const { email, password } = req.body;
 	if (!email || !password) {
 		throw new ApiError('Email and password are required', 400, 'CREDENTIALS_REQUIRED');
@@ -260,7 +285,7 @@ router.post('/login', asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Invalid or expired refresh token, code: REFRESH_TOKEN_INVALID }
  */
-router.post('/refresh', asyncHandler(async (req, res) => {
+router.post('/refresh', validate(refreshTokenValidation), asyncHandler(async (req, res) => {
 	const { refreshToken } = req.body;
 	if (!refreshToken) {
 		throw new ApiError('Refresh token is required', 400, 'REFRESH_TOKEN_REQUIRED');
@@ -320,7 +345,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Refresh token is required, code: REFRESH_TOKEN_REQUIRED }
  */
-router.post('/logout', asyncHandler(async (req, res) => {
+router.post('/logout', validate(refreshTokenValidation), asyncHandler(async (req, res) => {
 	const { refreshToken } = req.body;
 	if (!refreshToken) {
 		throw new ApiError('Refresh token is required', 400, 'REFRESH_TOKEN_REQUIRED');
