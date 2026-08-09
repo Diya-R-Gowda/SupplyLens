@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import api from '../api/axios';
 import SupplierCard from '../components/SupplierCard';
 import SupplierDetail from './SupplierDetail';
@@ -7,9 +7,22 @@ import DashboardOverview from '../components/DashboardOverview';
 import RiskConfigPanel from '../components/RiskConfigPanel';
 import ForecastPanel from '../components/ForecastPanel';
 import PortfolioTimelinePage from '../components/PortfolioTimelinePage';
-import GeographicMapPage from '../components/GeographicMapPage';
 import RiskHeatmapPage from '../components/RiskHeatmapPage';
-import ConcentrationGraphPage from '../components/ConcentrationGraphPage';
+
+// Lazy-loaded: react-leaflet and @xyflow/react are this app's two heaviest
+// dependencies (Phase 10 audit finding - confirmed by comparing the
+// production build's chunk sizes before/after this change, see the commit
+// message) and are each used on exactly one dashboard view a user may never
+// visit in a given session. Every other page here stays a static import -
+// it's a small, deliberate list, not a blanket "lazy everything" pass.
+const GeographicMapPage = lazy(() => import('../components/GeographicMapPage'));
+const ConcentrationGraphPage = lazy(() => import('../components/ConcentrationGraphPage'));
+
+const VisualizationFallback = () => (
+  <div className="border border-dashed border-slate-400 rounded-[20px] p-6 bg-white/55">
+    <p className="m-0 text-slate-600">Loading...</p>
+  </div>
+);
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -150,11 +163,15 @@ export default function Dashboard({ user, onLogout }) {
       ) : activeVisualization === 'timeline' ? (
         <PortfolioTimelinePage onBack={() => setActiveVisualization(null)} />
       ) : activeVisualization === 'map' ? (
-        <GeographicMapPage onBack={() => setActiveVisualization(null)} />
+        <Suspense fallback={<VisualizationFallback />}>
+          <GeographicMapPage onBack={() => setActiveVisualization(null)} />
+        </Suspense>
       ) : activeVisualization === 'heatmap' ? (
         <RiskHeatmapPage onBack={() => setActiveVisualization(null)} />
       ) : activeVisualization === 'concentration' ? (
-        <ConcentrationGraphPage onBack={() => setActiveVisualization(null)} />
+        <Suspense fallback={<VisualizationFallback />}>
+          <ConcentrationGraphPage onBack={() => setActiveVisualization(null)} />
+        </Suspense>
       ) : (
         <>
           <div className="flex items-start justify-between gap-4">
