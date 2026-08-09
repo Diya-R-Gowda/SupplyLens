@@ -2,17 +2,22 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const swaggerUi = require('swagger-ui-express');
 const connectDB = require('./config/db'); // Your Mongoose connection logic
 const swaggerSpec = require('./config/swagger');
+const corsOptions = require('./config/corsOptions');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
+const { generalLimiter } = require('./middleware/rateLimit');
 const newsCron = require('./jobs/newsCron');
 const snapshotCron = require('./jobs/snapshotCron');
 const app = express();
 
-app.use(cors());
+app.use(helmet());
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(generalLimiter);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
