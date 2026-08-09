@@ -3,9 +3,11 @@ const mongoose = require('mongoose');
 const { query } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
+const AuditLog = require('../models/AuditLog');
 const { getPortfolioForecast } = require('../services/predictiveAnalyticsService');
 const { getPortfolioTimeline } = require('../services/portfolioTimelineService');
 const { getSupplierLocations } = require('../services/geoLocationService');
@@ -26,6 +28,14 @@ const timelineQueryValidation = [
   query('supplierId').optional().isMongoId().withMessage('supplierId must be a valid id'),
   query('days').optional().isInt({ min: 1 }).withMessage('days must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: MAX_TIMELINE_LIMIT }).withMessage(`limit must be between 1 and ${MAX_TIMELINE_LIMIT}`),
+];
+
+const DEFAULT_AUDIT_LOG_LIMIT = 50;
+const MAX_AUDIT_LOG_LIMIT = 200;
+
+const auditLogQueryValidation = [
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: MAX_AUDIT_LOG_LIMIT }).withMessage(`limit must be between 1 and ${MAX_AUDIT_LOG_LIMIT}`),
 ];
 
 /**
@@ -224,6 +234,76 @@ router.get('/concentration-graph', auth, asyncHandler(async (req, res) => {
 
   const result = await getConcentrationGraph(req.user.orgId);
   return sendSuccess(res, result);
+}));
+
+/**
+ * @swagger
+ * /org/audit-logs:
+ *   get:
+ *     summary: Phase 10 - paginated, org-scoped log of real user actions (not score history, not AI chat)
+ *     description: >
+ *       Admin-only. Distinct from RiskHistory/HealthHistory (score changes, not user actions) and
+ *       Conversation (AI chat, not administrative actions) - this is the only record of "user X
+ *       did action Y at time Z" anywhere in this app. Currently hooked into every admin-gated
+ *       mutation (supplier create/update/delete/business-fields, document upload/delete,
+ *       risk-config update) - see TODO.md for what isn't yet covered. Not available in demo mode
+ *       (no AuditLog entries are ever created there).
+ *     tags: [Audit]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *     responses:
+ *       200:
+ *         description: Most recent actions first, with the acting user's email resolved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       403:
+ *         description: Caller is not an org admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.get('/audit-logs', auth, requireRole('admin'), validate(auditLogQueryValidation), asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, { logs: [], total: 0, page: 1, limit: DEFAULT_AUDIT_LOG_LIMIT, totalPages: 1 });
+  }
+
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || DEFAULT_AUDIT_LOG_LIMIT;
+
+  const [logs, total] = await Promise.all([
+    AuditLog.find({ orgId: req.user.orgId })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('userId', 'email')
+      .lean(),
+    AuditLog.countDocuments({ orgId: req.user.orgId }),
+  ]);
+
+  return sendSuccess(res, {
+    logs: logs.map((entry) => ({
+      _id: entry._id,
+      action: entry.action,
+      targetType: entry.targetType,
+      targetId: entry.targetId,
+      detail: entry.detail,
+      userEmail: entry.userId?.email || null,
+      createdAt: entry.createdAt,
+    })),
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  });
 }));
 
 module.exports = router;
