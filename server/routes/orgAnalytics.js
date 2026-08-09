@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 const { getPortfolioForecast } = require('../services/predictiveAnalyticsService');
 const { getPortfolioTimeline } = require('../services/portfolioTimelineService');
+const { getSupplierLocations } = require('../services/geoLocationService');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
 
@@ -100,6 +101,41 @@ router.get('/timeline', auth, asyncHandler(async (req, res) => {
     days: Number.isFinite(days) && days > 0 ? days : undefined,
     limit,
   });
+  return sendSuccess(res, result);
+}));
+
+/**
+ * @swagger
+ * /org/supplier-locations:
+ *   get:
+ *     summary: Phase 9 Step 2 - supplier locations at COUNTRY-LEVEL approximation, for the Geographic Map
+ *     description: >
+ *       No lat/long or address exists anywhere in this schema - `country` (a 2-letter ISO code) is
+ *       the only location data any supplier has. Each supplier is mapped to its country's
+ *       approximate capital-city coordinate (`server/data/countryCentroids.json`, a static lookup
+ *       table, no geocoding API/key). **This is a country-level approximation, not a precise
+ *       supplier location** - every supplier from the same country renders at the same point.
+ *       `locatable: false` (and null lat/lng) for the rare case of a country code not in the lookup
+ *       table, reported honestly rather than dropped or placed at a made-up point. Not available in
+ *       demo mode.
+ *     tags: [Visualization]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Per-supplier country-centroid coordinates plus risk/health scores for map markers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ */
+router.get('/supplier-locations', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, {
+      suppliers: [], totalSuppliers: 0, countriesRepresented: 0, unlocatableCount: 0, granularity: 'country_centroid',
+    });
+  }
+
+  const result = await getSupplierLocations(req.user.orgId);
   return sendSuccess(res, result);
 }));
 
