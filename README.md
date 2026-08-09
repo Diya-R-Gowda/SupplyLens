@@ -102,7 +102,7 @@ A scheduled background worker:
 
 | Layer | Technology |
 |--------|------------|
-| **Frontend** | React, Vite, Tailwind CSS, React Router, Axios |
+| **Frontend** | React, Vite, Tailwind CSS, Axios |
 | **Backend** | Node.js, Express, Mongoose, Multer, Node-cron |
 | **Database** | MongoDB Atlas (Vector Search) |
 | **Authentication** | JWT, Bcryptjs |
@@ -112,6 +112,11 @@ A scheduled background worker:
 ---
 
 # 🏗️ System Architecture
+
+> For the real technical depth - actual route/service/job layout, the org-scoping security
+> convention, and the honesty-framing decisions behind the AI features - see
+> [ARCHITECTURE.md](ARCHITECTURE.md). For the full phase-by-phase build history, see
+> [CONTRIBUTING.md](CONTRIBUTING.md). The diagram below is a simplified, high-level picture.
 
 ```
                    +----------------------+
@@ -158,22 +163,27 @@ SupplyLens/
 │   │   ├── api/
 │   │   ├── components/
 │   │   ├── pages/
-│   │   ├── hooks/
 │   │   └── App.jsx
 │   │
 │   └── package.json
 │
 ├── server/
+│   ├── config/
 │   ├── middleware/
 │   ├── jobs/
 │   ├── models/
 │   ├── routes/
 │   ├── services/
-│   ├── uploads/
+│   ├── tests/
 │   ├── index.js
 │   └── package.json
 │
 ├── README.md
+├── ARCHITECTURE.md
+├── CONTRIBUTING.md
+├── TODO.md
+├── docker-compose.yml
+├── render.yaml
 └── .gitignore
 ```
 
@@ -318,8 +328,7 @@ SupplyLens uses:
 - Supplier Performance Analytics
 - Vendor Comparison Dashboard
 - Live Risk Monitoring
-- Azure/AWS Deployment
-- Role-Based Access Control (RBAC)
+- A real live deployment (Docker + a [Render blueprint](render.yaml) exist and are ready - see [TODO.md](TODO.md) for the account/billing step still needed)
 
 ---
 
