@@ -72,6 +72,9 @@ export default function ScenarioSimulatorPanel({
               </Badge>
               <Badge className={factorBadgeClass}>{simulation.concentrationRisk.totalOrgSuppliers} suppliers total in org</Badge>
             </div>
+            <p className="m-0 text-slate-500 text-[0.78rem]">
+              See the dashboard's "Concentration &amp; redundancy" view for this same real relationship data across your whole org, visualized as a graph.
+            </p>
           </Card>
 
           <Card className="grid gap-2 p-4 rounded-2xl bg-white/72">
