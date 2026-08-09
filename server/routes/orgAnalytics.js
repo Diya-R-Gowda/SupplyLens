@@ -7,6 +7,7 @@ const { sendSuccess } = require('../utils/response');
 const { getPortfolioForecast } = require('../services/predictiveAnalyticsService');
 const { getPortfolioTimeline } = require('../services/portfolioTimelineService');
 const { getSupplierLocations } = require('../services/geoLocationService');
+const { getRiskHeatmap } = require('../services/riskHeatmapService');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
 
@@ -136,6 +137,37 @@ router.get('/supplier-locations', auth, asyncHandler(async (req, res) => {
   }
 
   const result = await getSupplierLocations(req.user.orgId);
+  return sendSuccess(res, result);
+}));
+
+/**
+ * @swagger
+ * /org/risk-heatmap:
+ *   get:
+ *     summary: Phase 9 Step 3 - average risk/health score per country, at COUNTRY-LEVEL granularity
+ *     description: >
+ *       Aggregates `GET /org/supplier-locations` by country - same country-centroid data, same
+ *       honesty ceiling: this can only ever be as granular as the underlying location data, which is
+ *       country-level only (no per-supplier coordinates exist anywhere in this schema). Correctly
+ *       reflects the current sparse-data reality rather than hiding it - an org with suppliers in
+ *       only 1-2 countries will honestly show only 1-2 entries, not a fabricated fuller picture. Not
+ *       available in demo mode.
+ *     tags: [Visualization]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Per-country average risk/health score and supplier count, sorted highest risk first
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ */
+router.get('/risk-heatmap', auth, asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    return sendSuccess(res, { countries: [], countriesRepresented: 0, granularity: 'country_centroid' });
+  }
+
+  const result = await getRiskHeatmap(req.user.orgId);
   return sendSuccess(res, result);
 }));
 
