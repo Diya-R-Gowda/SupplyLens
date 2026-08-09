@@ -8,6 +8,7 @@ import RiskConfigPanel from '../components/RiskConfigPanel';
 import ForecastPanel from '../components/ForecastPanel';
 import PortfolioTimelinePage from '../components/PortfolioTimelinePage';
 import GeographicMapPage from '../components/GeographicMapPage';
+import RiskHeatmapPage from '../components/RiskHeatmapPage';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -149,6 +150,8 @@ export default function Dashboard({ user, onLogout }) {
         <PortfolioTimelinePage onBack={() => setActiveVisualization(null)} />
       ) : activeVisualization === 'map' ? (
         <GeographicMapPage onBack={() => setActiveVisualization(null)} />
+      ) : activeVisualization === 'heatmap' ? (
+        <RiskHeatmapPage onBack={() => setActiveVisualization(null)} />
       ) : (
         <>
           <div className="flex items-start justify-between gap-4">
@@ -174,6 +177,9 @@ export default function Dashboard({ user, onLogout }) {
             </Button>
             <Button onClick={() => setActiveVisualization('map')} className="rounded-full px-3.5 py-2 text-[0.85rem]">
               Geographic map
+            </Button>
+            <Button onClick={() => setActiveVisualization('heatmap')} className="rounded-full px-3.5 py-2 text-[0.85rem]">
+              Risk heatmap
             </Button>
           </div>
 
