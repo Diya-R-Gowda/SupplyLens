@@ -27,6 +27,7 @@ const { getOrgWeights } = require('../services/riskConfigService');
 const { buildNarrativesForHistory } = require('../services/narrativeService');
 const { buildSupplierTwin } = require('../services/twinService');
 const { takeSnapshot } = require('../services/snapshotService');
+const { recordAuditLog } = require('../services/auditLogService');
 const SupplierSnapshot = require('../models/SupplierSnapshot');
 const { syncScoresAfterChange } = require('../services/twinSyncService');
 const { computeRiskScore } = require('../services/riskScoreService');
@@ -332,6 +333,11 @@ router.post('/', auth, requireRole('admin'), validate(createSupplierValidation),
     orgId: req.user.orgId,
   });
   const supplier = await newSupplier.save();
+
+  await recordAuditLog({
+    orgId: req.user.orgId, userId: req.user.id, action: 'supplier.created', targetType: 'Supplier', targetId: supplier._id, detail: { name: supplier.name },
+  });
+
   return sendSuccess(res, supplier, { status: 201 });
 }));
 
@@ -442,6 +448,10 @@ const updateHandler = asyncHandler(async (req, res) => {
     await computeRiskScore(updated, 'manual_edit');
   }
   await computeHealthScore(updated, 'manual_edit');
+
+  await recordAuditLog({
+    orgId: req.user.orgId, userId: req.user.id, action: 'supplier.updated', targetType: 'Supplier', targetId: updated._id, detail: { fieldsChanged: Object.keys(updates).filter((key) => updates[key] !== undefined) },
+  });
 
   return sendSuccess(res, updated);
 });
@@ -641,7 +651,15 @@ router.delete('/:id', auth, requireRole('admin'), asyncHandler(async (req, res) 
   }
 
   const supplier = await findOrgSupplier(req.params.id, req.user.orgId);
+  const { _id: deletedId, name: deletedName } = supplier;
   await deleteSupplierCascade(supplier);
+
+  // Logged with the name captured before deletion, since the supplier
+  // itself no longer exists afterward for a viewer to look up.
+  await recordAuditLog({
+    orgId: req.user.orgId, userId: req.user.id, action: 'supplier.deleted', targetType: 'Supplier', targetId: deletedId, detail: { name: deletedName },
+  });
+
   return sendSuccess(res, null, { message: 'Supplier deleted' });
 }));
 
@@ -1730,6 +1748,10 @@ router.patch('/:id/business-fields', auth, requireRole('admin'), validate(busine
     updatedAt: new Date(),
   };
   await supplier.save();
+
+  await recordAuditLog({
+    orgId: req.user.orgId, userId: req.user.id, action: 'supplier.business_fields_updated', targetType: 'Supplier', targetId: supplier._id, detail: { fieldsChanged: Object.keys(req.body) },
+  });
 
   return sendSuccess(res, supplier.businessImpact);
 }));

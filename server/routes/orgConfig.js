@@ -16,6 +16,7 @@ const {
   validateHealthWeights,
   validateAlertThresholds,
 } = require('../services/riskConfigService');
+const { recordAuditLog } = require('../services/auditLogService');
 
 // A real bug this closes: validateAlertThresholds does `'riskThreshold' in
 // thresholds` - the `in` operator throws a TypeError if the right-hand side
@@ -159,6 +160,16 @@ router.patch('/risk-config', auth, requireRole('admin'), validate(riskConfigVali
   }
 
   const config = await upsertOrgConfig(req.user.orgId, { riskWeights, healthWeights, alertThresholds });
+
+  await recordAuditLog({
+    orgId: req.user.orgId,
+    userId: req.user.id,
+    action: 'riskConfig.updated',
+    targetType: 'RiskConfig',
+    targetId: config._id,
+    detail: { fieldsChanged: Object.keys(req.body) },
+  });
+
   return sendSuccess(res, config);
 }));
 
