@@ -3,7 +3,10 @@ import axios from 'axios';
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_KEY = 'user';
-const BASE_URL = 'http://127.0.0.1:5000/api';
+// Overridable at build time via VITE_API_BASE_URL (e.g. a Docker/deployment
+// build where the API isn't at localhost:5000) - defaults to the existing
+// local-dev value so `npm run dev` behavior is unchanged.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api';
 
 export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
 export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
