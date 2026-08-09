@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Supplier = require('../models/Supplier');
 const CronRunLog = require('../models/CronRunLog');
 const { takeSnapshot } = require('../services/snapshotService');
+const logger = require('../config/logger');
 
 // Daily, not hourly/6-hourly like newsCron - a full twin-state snapshot is
 // for historical comparison/auditing ("what did this supplier look like a
@@ -20,11 +21,11 @@ const CATCH_UP_WINDOW_MS = 25 * 60 * 60 * 1000;
 
 const runScheduledSnapshots = async () => {
   if (mongoose.connection.readyState !== 1) {
-    console.log('snapshotCron: skipping run, MongoDB not connected (demo mode)');
+    logger.info('snapshotCron: skipping run, MongoDB not connected (demo mode)');
     return;
   }
 
-  console.log('snapshotCron: starting scheduled snapshots...');
+  logger.info('snapshotCron: starting scheduled snapshots...');
   const suppliers = await Supplier.find({});
 
   for (const supplier of suppliers) {
@@ -35,7 +36,7 @@ const runScheduledSnapshots = async () => {
     { lastRunAt: new Date() },
     { upsert: true }
   );
-  console.log(`snapshotCron: snapshot complete for ${suppliers.length} supplier(s).`);
+  logger.info({ supplierCount: suppliers.length }, 'snapshotCron: snapshot complete');
 };
 
 // node-cron's scheduler is a single in-process setTimeout heartbeat - if the
@@ -52,15 +53,15 @@ const catchUpIfMissed = async () => {
   const lastRun = await CronRunLog.findOne({ jobName: JOB_NAME });
   const isOverdue = !lastRun || (Date.now() - lastRun.lastRunAt.getTime()) > CATCH_UP_WINDOW_MS;
   if (isOverdue) {
-    console.log('snapshotCron: last scheduled run is overdue (or none found) - running a catch-up pass now.');
+    logger.info('snapshotCron: last scheduled run is overdue (or none found) - running a catch-up pass now.');
     await runScheduledSnapshots();
   }
 };
 
 const start = () => {
   cron.schedule(SCHEDULE, runScheduledSnapshots);
-  console.log(`snapshotCron: scheduled (${SCHEDULE})`);
-  catchUpIfMissed().catch((err) => console.error('snapshotCron: catch-up check failed', err));
+  logger.info({ schedule: SCHEDULE }, 'snapshotCron: scheduled');
+  catchUpIfMissed().catch((err) => logger.error({ err }, 'snapshotCron: catch-up check failed'));
 };
 
 module.exports = { start, runScheduledSnapshots };

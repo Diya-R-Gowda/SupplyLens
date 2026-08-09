@@ -1,4 +1,5 @@
 const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
 
 const sendError = (res, status, message, code, details) => {
   const error = { message, code };
@@ -34,7 +35,11 @@ module.exports = (err, req, res, next) => { // eslint-disable-line no-unused-var
   }
 
   // Unrecognized/programmer error: log the real thing server-side, never leak
-  // it (message or stack) to the client.
-  console.error(err);
+  // it (message or stack) to the client, in any environment - not just
+  // production. There's no "show the stack trace in dev" branch here on
+  // purpose: the client-facing response is identical everywhere, so that
+  // behavior is never accidentally different in whichever environment this
+  // actually gets deployed to.
+  logger.error({ err }, 'Unhandled error');
   return sendError(res, 500, 'Internal server error', 'INTERNAL_ERROR');
 };

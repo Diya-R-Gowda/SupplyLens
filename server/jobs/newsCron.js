@@ -4,6 +4,7 @@ const Supplier = require('../models/Supplier');
 const CronRunLog = require('../models/CronRunLog');
 const { fetchAndSentimentTagNews } = require('../services/newsService');
 const { syncScoresAfterChange } = require('../services/twinSyncService');
+const logger = require('../config/logger');
 
 // Every 6 hours - frequent enough that news stays reasonably fresh, without
 // hammering NewsAPI's free-tier daily request quota (100/day) across every
@@ -17,11 +18,11 @@ const CATCH_UP_WINDOW_MS = 7 * 60 * 60 * 1000;
 
 const runNewsAndRiskUpdate = async () => {
   if (mongoose.connection.readyState !== 1) {
-    console.log('newsCron: skipping run, MongoDB not connected (demo mode)');
+    logger.info('newsCron: skipping run, MongoDB not connected (demo mode)');
     return;
   }
 
-  console.log('newsCron: starting news + risk update...');
+  logger.info('newsCron: starting news + risk update...');
   const suppliers = await Supplier.find({});
 
   for (const supplier of suppliers) {
@@ -33,7 +34,7 @@ const runNewsAndRiskUpdate = async () => {
     { lastRunAt: new Date() },
     { upsert: true }
   );
-  console.log(`newsCron: update complete for ${suppliers.length} supplier(s).`);
+  logger.info({ supplierCount: suppliers.length }, 'newsCron: update complete');
 };
 
 // See snapshotCron.js for the fuller reasoning - node-cron logs a missed
@@ -47,15 +48,15 @@ const catchUpIfMissed = async () => {
   const lastRun = await CronRunLog.findOne({ jobName: JOB_NAME });
   const isOverdue = !lastRun || (Date.now() - lastRun.lastRunAt.getTime()) > CATCH_UP_WINDOW_MS;
   if (isOverdue) {
-    console.log('newsCron: last scheduled run is overdue (or none found) - running a catch-up pass now.');
+    logger.info('newsCron: last scheduled run is overdue (or none found) - running a catch-up pass now.');
     await runNewsAndRiskUpdate();
   }
 };
 
 const start = () => {
   cron.schedule(SCHEDULE, runNewsAndRiskUpdate);
-  console.log(`newsCron: scheduled (${SCHEDULE})`);
-  catchUpIfMissed().catch((err) => console.error('newsCron: catch-up check failed', err));
+  logger.info({ schedule: SCHEDULE }, 'newsCron: scheduled');
+  catchUpIfMissed().catch((err) => logger.error({ err }, 'newsCron: catch-up check failed'));
 };
 
 module.exports = { start, runNewsAndRiskUpdate };

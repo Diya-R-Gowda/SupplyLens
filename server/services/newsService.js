@@ -1,6 +1,7 @@
 const axios = require('axios');
 const NewsCache = require('../models/NewsCache');
 const { classifyHeadlineSentiment } = require('./sentimentService');
+const logger = require('../config/logger');
 
 const CURRENTS_BASE_URL = 'https://api.currentsapi.services/v1/search';
 
@@ -12,7 +13,7 @@ const CURRENTS_BASE_URL = 'https://api.currentsapi.services/v1/search';
 // going for other suppliers even if one fails.
 exports.fetchAndSentimentTagNews = async (supplier) => {
   if (!process.env.CURRENTS_API_KEY) {
-    console.warn(`Skipping news fetch for "${supplier.name}": CURRENTS_API_KEY not set`);
+    logger.warn({ supplier: supplier.name }, 'Skipping news fetch: CURRENTS_API_KEY not set');
     return { fetched: 0, stored: 0 };
   }
 
@@ -28,7 +29,10 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
     });
     articles = response.data.news || [];
   } catch (err) {
-    console.error(`News fetch failed for "${supplier.name}":`, err.response?.data?.message || err.message);
+    // Deliberately logs only the message, never the whole err/response
+    // object - axios's error includes the original request config, which
+    // carries CURRENTS_API_KEY as a query param.
+    logger.error({ supplier: supplier.name, message: err.response?.data?.message || err.message }, 'News fetch failed');
     return { fetched: 0, stored: 0 };
   }
 
@@ -50,7 +54,7 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
         // Graceful degradation, matching the embedding-failure pattern from
         // Phase 2: a single article's sentiment classification failing must
         // never block storing the article itself.
-        console.error(`Sentiment classification failed for "${article.title}":`, sentimentErr.message);
+        logger.error({ article: article.title, message: sentimentErr.message }, 'Sentiment classification failed');
       }
 
       // Currents doesn't return a separate publisher name field - fall back
@@ -71,7 +75,7 @@ exports.fetchAndSentimentTagNews = async (supplier) => {
       stored += 1;
     } catch (articleErr) {
       // Per-article isolation: one bad article must not lose the rest of the batch.
-      console.error(`Failed to store article "${article.title}" for "${supplier.name}":`, articleErr.message);
+      logger.error({ article: article.title, supplier: supplier.name, message: articleErr.message }, 'Failed to store article');
     }
   }
 
