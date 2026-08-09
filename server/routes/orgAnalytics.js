@@ -1,7 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const { query } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../utils/response');
 const { getPortfolioForecast } = require('../services/predictiveAnalyticsService');
@@ -14,6 +16,17 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
 
 const DEFAULT_TIMELINE_LIMIT = 150;
 const MAX_TIMELINE_LIMIT = 500;
+
+// Already-safe against NaN via the Number.isFinite/Math.max/min guards
+// below, so this isn't a crash fix - it's the same explicit, documented
+// validation coverage every other query-accepting route in this phase got,
+// producing a clean VALIDATION_ERROR instead of silently ignoring garbage
+// input.
+const timelineQueryValidation = [
+  query('supplierId').optional().isMongoId().withMessage('supplierId must be a valid id'),
+  query('days').optional().isInt({ min: 1 }).withMessage('days must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: MAX_TIMELINE_LIMIT }).withMessage(`limit must be between 1 and ${MAX_TIMELINE_LIMIT}`),
+];
 
 /**
  * @swagger
@@ -88,7 +101,7 @@ router.get('/forecast', auth, asyncHandler(async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/SuccessEnvelope'
  */
-router.get('/timeline', auth, asyncHandler(async (req, res) => {
+router.get('/timeline', auth, validate(timelineQueryValidation), asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     return sendSuccess(res, {
       events: [], totalEvents: 0, suppliersIncluded: 0, truncated: false,

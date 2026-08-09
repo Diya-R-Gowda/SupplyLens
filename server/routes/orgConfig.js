@@ -1,8 +1,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const { body } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
+const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
@@ -14,6 +16,18 @@ const {
   validateHealthWeights,
   validateAlertThresholds,
 } = require('../services/riskConfigService');
+
+// A real bug this closes: validateAlertThresholds does `'riskThreshold' in
+// thresholds` - the `in` operator throws a TypeError if the right-hand side
+// isn't an object at all (e.g. a client sending `"alertThresholds": "x"`),
+// which would have reached the client as an uncaught 500 instead of a clean
+// 400. isObject() here rejects non-object values before any of the three
+// custom weight/threshold validators ever run.
+const riskConfigValidation = [
+  body('riskWeights').optional().isObject().withMessage('riskWeights must be an object'),
+  body('healthWeights').optional().isObject().withMessage('healthWeights must be an object'),
+  body('alertThresholds').optional().isObject().withMessage('alertThresholds must be an object'),
+];
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
 
@@ -124,7 +138,7 @@ router.get('/risk-config', auth, asyncHandler(async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorEnvelope'
  */
-router.patch('/risk-config', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+router.patch('/risk-config', auth, requireRole('admin'), validate(riskConfigValidation), asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     throw new ApiError('Risk config editing is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
   }

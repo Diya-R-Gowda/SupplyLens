@@ -1,4 +1,5 @@
 const express = require('express');
+const { param, body } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { answerSupplierQuestion } = require('../services/ragService');
@@ -6,11 +7,23 @@ const mongoose = require('mongoose');
 const Supplier = require('../models/Supplier');
 const Conversation = require('../models/Conversation');
 const { answerDemoQuestion } = require('../services/demoStore');
+const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
+
+// `question` was previously only checked for truthiness (`!question`), so a
+// non-string (e.g. an object) would have reached the embedding/Gemini call
+// unchecked. `.optional()` on both fields preserves the existing manual
+// QUESTION_REQUIRED check for the missing case; these add real coverage for
+// present-but-malformed values.
+const askQuestionValidation = [
+  param('supplierId').isMongoId().withMessage('supplierId must be a valid id'),
+  body('question').optional().isString().trim().isLength({ min: 1, max: 2000 }).withMessage('question must be a non-empty string of at most 2000 characters'),
+  body('conversationId').optional().isMongoId().withMessage('conversationId must be a valid id'),
+];
 
 /**
  * @swagger
@@ -100,7 +113,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               success: false
  *               error: { message: Internal server error, code: INTERNAL_ERROR }
  */
-router.post('/:supplierId', auth, asyncHandler(async (req, res) => {
+router.post('/:supplierId', auth, validate(askQuestionValidation), asyncHandler(async (req, res) => {
   const { supplierId } = req.params;
   const { question, conversationId } = req.body;
 

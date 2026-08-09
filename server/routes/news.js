@@ -1,4 +1,5 @@
 const express = require('express');
+const { param } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
@@ -7,11 +8,14 @@ const Supplier = require('../models/Supplier');
 const { listDemoNews } = require('../services/demoStore');
 const { fetchAndSentimentTagNews } = require('../services/newsService');
 const { syncScoresAfterChange } = require('../services/twinSyncService');
+const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
+
+const supplierIdParamValidation = [param('supplierId').isMongoId().withMessage('supplierId must be a valid id')];
 
 /**
  * @swagger
@@ -66,7 +70,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               success: false
  *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  */
-router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
+router.get('/:supplierId', auth, validate(supplierIdParamValidation), asyncHandler(async (req, res) => {
 	if (isDemoMode()) {
 		return sendSuccess(res, listDemoNews(req.params.supplierId));
 	}
@@ -134,7 +138,7 @@ router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  */
-router.post('/:supplierId/refresh', auth, asyncHandler(async (req, res) => {
+router.post('/:supplierId/refresh', auth, validate(supplierIdParamValidation), asyncHandler(async (req, res) => {
 	if (isDemoMode()) {
 		throw new ApiError('News refresh is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
 	}

@@ -1,7 +1,9 @@
 const express = require('express');
+const { param } = require('express-validator');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
+const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { processPDF } = require('../services/ingestService');
 const { uploadBuffer, deleteFile } = require('../services/gridfsService');
@@ -16,6 +18,18 @@ const ApiError = require('../utils/ApiError');
 const { sendSuccess } = require('../utils/response');
 
 const isDemoMode = () => mongoose.connection.readyState !== 1;
+
+// Params were previously unvalidated - a malformed id fell through to a
+// Mongoose CastError (caught generically by errorHandler as a 400 INVALID_ID)
+// rather than a clean, field-labeled VALIDATION_ERROR. isMongoId() catches it
+// earlier with a more specific, consistent response shape. Demo mode uses
+// synthetic non-ObjectId ids (see demoStore.js) so this only applies to
+// real-mode routes below - each handler still checks isDemoMode() first.
+const supplierIdParamValidation = [param('supplierId').isMongoId().withMessage('supplierId must be a valid id')];
+const docIdParamsValidation = [
+  param('supplierId').isMongoId().withMessage('supplierId must be a valid id'),
+  param('docId').isMongoId().withMessage('docId must be a valid id'),
+];
 
 /**
  * @swagger
@@ -84,7 +98,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
  *               success: false
  *               error: { message: Internal server error, code: INTERNAL_ERROR }
  */
-router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/upload/:supplierId', auth, validate(supplierIdParamValidation), upload.single('file'), asyncHandler(async (req, res) => {
   const { supplierId } = req.params;
   if (!req.file) {
     throw new ApiError('No file uploaded', 400, 'FILE_REQUIRED');
@@ -178,7 +192,7 @@ router.post('/upload/:supplierId', auth, upload.single('file'), asyncHandler(asy
  *               success: false
  *               error: { message: Supplier not found, code: SUPPLIER_NOT_FOUND }
  */
-router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
+router.get('/:supplierId', auth, validate(supplierIdParamValidation), asyncHandler(async (req, res) => {
   if (isDemoMode()) {
     return sendSuccess(res, listDemoDocuments(req.params.supplierId));
   }
@@ -250,7 +264,7 @@ router.get('/:supplierId', auth, asyncHandler(async (req, res) => {
  *               success: false
  *               error: { message: Document not found, code: DOCUMENT_NOT_FOUND }
  */
-router.delete('/:supplierId/:docId', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+router.delete('/:supplierId/:docId', auth, requireRole('admin'), validate(docIdParamsValidation), asyncHandler(async (req, res) => {
   const { supplierId, docId } = req.params;
 
   if (isDemoMode()) {
