@@ -1,0 +1,49 @@
+# Local dev/testing orchestration only. The `mongo` service below is a
+# throwaway container for running the full stack locally through Docker -
+# production should point MONGO_URI at a real MongoDB Atlas connection
+# string instead (set it in the environment docker-compose.prod.yml or your
+# hosting platform uses, and remove/skip the `mongo` service entirely).
+#
+# Secrets (JWT_SECRET, GEMINI_API_KEY, CURRENTS_API_KEY) are read from a
+# `.env` file at the repo root - the same file server/index.js already loads
+# in non-Docker local dev (see server/.env.example for the full list).
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  server:
+    build:
+      context: ./server
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+    environment:
+      PORT: 5000
+      MONGO_URI: mongodb://mongo:27017/supplylens
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CURRENTS_API_KEY: ${CURRENTS_API_KEY:-}
+    depends_on:
+      - mongo
+
+  client:
+    build:
+      context: ./client
+      args:
+        # Browser-side code talks to the server via the host's published
+        # port, not the Docker-internal service name - the browser runs on
+        # the host, outside the compose network entirely.
+        VITE_API_BASE_URL: http://127.0.0.1:5000/api
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - server
+
+volumes:
+  mongo_data:
