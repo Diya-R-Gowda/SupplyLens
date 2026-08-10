@@ -305,33 +305,66 @@ Full pass/fail verification is in [Phase 8 Complete — End-to-End Smoke Test](#
 
 ---
 
-# Remaining Work — Phase 9 (Supply Chain Visualization)
+# Remaining Work — Phase 9 (Supply Chain Visualization) — ✅ COMPLETE (2026-08-09)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Supply Network Graph | Build interactive supplier dependency graphs using React Flow or Cytoscape.js. |
-| 🔴 | Geographic Map | Display supplier locations and regional risk on an interactive world map. |
-| 🔴 | Relationship Explorer | Visualize supplier connections, dependencies, and critical paths. |
-| 🔴 | Timeline Visualization | Show historical supplier events and risk evolution. |
-| 🔴 | Risk Heatmaps | Highlight geographic regions with elevated supplier risk. |
+| 🟢 | Supply Network Graph | Built as the **Concentration & Redundancy View**, deliberately never labeled a dependency graph - the pre-build audit confirmed no supplier-to-supplier relationship data (parent/child, upstream/downstream) exists anywhere in this schema. `GET /org/concentration-graph` (`concentrationGraphService.js`) - every edge is one of two real, traceable relationships: same-category pairs weighted by Phase 7's real `similarityService.js` scoring, or same-country-but-different-category pairs as a plain grouping fact. |
+| 🟢 | Geographic Map | `GET /org/supplier-locations` (`geoLocationService.js`) + `GeographicMapPage.jsx` (react-leaflet) - country-level approximation via a static 194-country centroid table (`server/data/countryCentroids.json`), no geocoding API/key. Labeled honestly as country-level everywhere, never implying precise addresses. |
+| 🟢 | Relationship Explorer | Folded into the same Concentration & Redundancy View above - one real feature covering both roadmap items, not two separate builds of the same underlying data. |
+| 🟢 | Timeline Visualization | `GET /org/timeline` (`portfolioTimelineService.js`) + `PortfolioTimelinePage.jsx` - genuinely new: merges every supplier's real events (created/updated, documents, news, risk/health changes) into one chronological, supplier-tagged feed, not a restatement of Phase 4's existing per-supplier timeline. |
+| 🟢 | Risk Heatmaps | `GET /org/risk-heatmap` (`riskHeatmapService.js`) + `RiskHeatmapPage.jsx` - a sorted recharts bar chart, not a choropleth (a true choropleth needs a country-boundary GeoJSON asset this project doesn't have, and would render mostly empty at current real data density). Same country-level honesty ceiling as the map. |
+
+See [Phase 9 Complete — End-to-End Smoke Test](#-phase-9-complete--end-to-end-smoke-test-2026-08-09) below for the full verification results.
+
+## Phase 9 — Technical Summary
+
+**Starting point: a completed read-only audit** that found no supplier-to-supplier relationship schema and no geographic coordinate data anywhere in this app - the two facts that shaped every naming/framing decision below. The audit's recommendation, followed exactly: visualize the real relationships that already exist (category/country/similarity proximity) and label them accurately, rather than fabricate a dependency graph the data doesn't support.
+
+- **Concentration & Redundancy View, never called a "dependency graph" or "network" anywhere user-facing** - in code, API responses, UI copy, or Swagger docs. `isSoleCategorySource`/`isSoleCountrySource` per node reuse the *exact same definition* as Phase 7's `simulationService.computeConcentrationRisk`, so "sole source" means the same thing across both features. Built with `@xyflow/react` (React Flow) over Cytoscape.js - broader React 19 peer support and a more idiomatic JSX node-rendering fit with this app's existing Tailwind/Card/Badge conventions; a hand-rolled category-column layout was used instead of a dagre/auto-layout dependency since the graph is small and category-grouped by design.
+- **Country-level-only geography, stated explicitly everywhere it's shown.** `Supplier.country` (a 2-letter ISO code) is the only location data anywhere in this schema - every supplier from the same country renders at the same map point, and both the map and heatmap say so in their own UI copy and Swagger docs rather than implying precision that doesn't exist.
+- **A real, evidence-based library switch, documented honestly rather than silently.** `react-simple-maps` was the original plan (SVG, lighter-weight) but failed `npm install` outright (ERESOLVE - it only declares support for React 16-18). `react-leaflet@5` declares native React 19 support and installed cleanly - the switch is recorded as the real reason it happened, not the originally-planned styling rationale.
+- **Portfolio Timeline required a correctness pattern worth naming**: `narrativeService.buildNarrativesForHistory` diffs each row against the immediately-prior row in whatever array it's given, so merging multiple suppliers' history into one shared array *before* calling it would incorrectly cross-compare different suppliers' data. Solved via a group-by-supplier-then-merge helper in `portfolioTimelineService.js` - narratives are built per-supplier first, then merged into the final sorted feed.
+- **Every relationship-graph edge is traceable to a stated real reason** - hand-verified against a deliberately-constructed 4-supplier test case with a known expected edge count/reasons before trusting the general implementation, not just eyeballed after the fact.
+- **Cleanup discipline held**: 10 `phase9_test_*`/`phase9_*test_*` orgs created across all 4 build steps, cleaned up in per-step batches (not one deferred sweep) via `deleteOrgCascade`, each batch verified live before and after. Final state: exactly the one real fixture org.
+
+Full pass/fail verification is in [Phase 9 Complete — End-to-End Smoke Test](#-phase-9-complete--end-to-end-smoke-test-2026-08-09); the naming/framing decisions above and what a *true* multi-tier dependency graph would actually require are tracked in `TODO.md` sections 2 and 4.
 
 ---
 
-# Remaining Work — Phase 10 (Enterprise Readiness)
+# Remaining Work — Phase 10 (Enterprise Readiness) — ✅ COMPLETE (2026-08-10)
 
 | Status | Item | Notes |
 |---------|------|-------|
-| 🔴 | Docker Support | Containerize frontend and backend services. |
-| 🔴 | CI/CD Pipelines | Automate builds, testing, and deployment using GitHub Actions. |
-| 🔴 | Automated Testing | Implement unit, integration, and end-to-end testing. |
-| 🔴 | Monitoring & Logging | Add centralized logging, health checks, and performance monitoring. |
-| 🔴 | Role-Based Access Control | Implement fine-grained authorization for enterprise users. |
-| 🔴 | Audit Logs | Record user actions and system events for traceability. |
-| 🔴 | Security Hardening | Apply OWASP best practices, input validation, rate limiting, and secure headers. |
-| 🔴 | Performance Optimization | Optimize database queries, caching, lazy loading, and API performance. |
-| 🔴 | Deployment | Deploy production-ready application using Docker, cloud infrastructure, and environment management. |
-| 🔴 | Technical Documentation | Complete developer guides, architecture documentation, deployment instructions, and API references. |
-🟢
+| 🟢 | Automated Testing | Real Jest + Supertest + mongodb-memory-server suite (`server/tests/`, 47 tests) - critical-path scope (auth flow, RBAC, 4-endpoint cross-org isolation, core scoring/forecast math), not comprehensive coverage of all 9 prior phases. The most foundational item this phase - everything else's "verified" claims below rest on this actually existing now. |
+| 🟢 | CI/CD Pipelines | `.github/workflows/ci.yml` - runs the real test suite plus a real client build check on every push/PR to `main`. Confirmed working by actually watching pushed runs pass on GitHub (`gh run watch`), not just written and assumed correct - caught and fixed a real Windows/Linux `package-lock.json` incompatibility twice this way. |
+| 🟢 | Docker Support | `server/Dockerfile` (single-stage), `client/Dockerfile` (multi-stage, nginx-served), `docker-compose.yml` (server + client + a throwaway local `mongo` service). Built and run for real (`docker compose up`), with a genuine end-to-end check through the actual containers - not just files that exist and look plausible. |
+| 🟢 | Monitoring & Logging | `GET /api/health` + `GET /api/health/db`, structured `pino`/`pino-http` logging replacing scattered `console.*` across every file that's part of the running server (not a one-off admin CLI script - see Technical Summary), with secret redaction confirmed live against a real bearer token. |
+| 🟢 | Role-Based Access Control | Deliberately left at the existing 2-role (admin/viewer) model - the audit found no real product need for more granularity anywhere in the codebase or `TODO.md`. A real gap found live *within* the existing model (the `viewer` role had no path to ever be created) was fixed as a same-phase follow-up - see below. |
+| 🟢 | Audit Logs | New `AuditLog` model + `GET /org/audit-logs` (admin-only, paginated), hooked into every admin-gated mutation plus document upload. Explicitly distinct in naming/comments from `RiskHistory`/`HealthHistory` (score changes) and `Conversation` (AI chat) - the audit specifically flagged the confusion risk. |
+| 🟢 | Security Hardening | `helmet`, `express-rate-limit` (general + a tighter auth-specific limit, confirmed live via a real 429-triggering burst), CORS scoped to a configured origin allowlist (confirmed live via real preflight allow/deny), input validation closing a real gap across 7 route files - including one genuine crash bug found and fixed (a string `alertThresholds` used to throw an uncaught 500). |
+| 🟢 | Performance Optimization | `React.lazy`/`Suspense` for the two heaviest dashboard pages (react-leaflet map, `@xyflow/react` graph) - real, measured bundle reduction (main bundle 1,109.80 kB → 778.44 kB), not an estimate. Indexes re-checked (already solid). Caching deliberately not added - no endpoint showed real evidence of needing it. |
+| 🟢 | Deployment | `.env.example` (fixing a real stale-docs bug - the old env example called the Gemini key `GOOGLE_API_KEY`, which the code has never read) + a real, schema-checked Render Blueprint (`render.yaml`). Honestly **not** actually deployed live this session - see Technical Summary and `TODO.md` §3 for the exact account/billing decision and next steps. |
+| 🟢 | Technical Documentation | New `ARCHITECTURE.md` (real route/service/job layout, the org-scoping/404-vs-403 convention, a summary of every honesty-framing decision since Phase 5) - kept separate from this changelog on purpose. `README.md` linked to both, plus 3 concrete stale inaccuracies fixed while doing that pass (a claimed React Router this app doesn't use, two folders that don't exist, and a "Future Improvements" list that still called RBAC unbuilt). |
+
+See [Phase 10 Complete — End-to-End Smoke Test](#-phase-10-complete--end-to-end-smoke-test-2026-08-10) below for the full verification results.
+
+## Phase 10 — Technical Summary
+
+**Starting point: a completed read-only audit whose central finding was that this project had zero automated test infrastructure** - every one of the prior 9 phases was verified through real manual testing (live API calls, live DB queries, hand-run Playwright scripts), never a repeatable suite. That finding shaped this phase's entire sequencing: Automated Testing was built first, since CI/CD would otherwise have nothing real to run, and every later step's "verified" claim below is only as credible as that first step actually being real.
+
+- **Automated Testing is real, critical-path coverage, named as such rather than oversold.** 47 tests across 5 files: the full auth flow (register/login/refresh-rotation/logout/invalid-credential rejection), `requireRole` in isolation, cross-org 404 isolation spanning 4 different route files (turning this project's single most-repeated manual check into something a machine now verifies on every push), and the two purely deterministic math services (`scoringEngine.applyCappedDelta`, `forecastService`'s sufficiency gating and regression). Explicitly **not** covered, stated plainly rather than implied: any Gemini-backed service, the cron jobs, document upload/GridFS, or Phase 9's own endpoints - comprehensive coverage of all 9 prior phases is a real multi-session effort on its own, not something this phase claims to have finished. `mongodb-memory-server` (a real, ephemeral mongod binary, not a mock) means the suite exercises real Mongoose queries/indexes/validation without ever touching the dev/production Atlas cluster.
+- **CI/CD's "verified" claim is unusually literal**: the workflow wasn't just written and reasoned through, it was watched. Pushing it immediately (ahead of the rest of the phase's batch, per the build instructions) surfaced a real bug within minutes - `npm ci` failing on GitHub's Linux runners because a Windows-generated `package-lock.json` had `mongodb-memory-server`'s optional platform-specific transitive deps out of sync. Fixed by regenerating from a clean `node_modules` and verifying `npm ci` locally before repushing - and it recurred a second time after the next `npm install` (helmet/express-rate-limit), confirming this is a real, repeatable gotcha now documented in `TODO.md` rather than a one-off fluke.
+- **Docker verification was a real local build-and-run, not "the files exist."** `docker compose build && up`, then real HTTP calls through the actual running containers: registered a real account, created a real supplier, confirmed the seeded starter data, hit `/api-docs` - then `docker compose down -v` to tear down the throwaway volume cleanly.
+- **Security Hardening found one genuine crash bug, not just hardening opportunities**: `riskConfigService.validateAlertThresholds` does `'riskThreshold' in thresholds`, and the `in` operator throws a `TypeError` when the right-hand side isn't an object at all (e.g. a client sending `"alertThresholds": "garbage"`) - that reached the client as an uncaught 500 instead of a clean 400. `body('alertThresholds').isObject()` now catches it before the custom validator ever runs. Rate limiting and CORS were both confirmed with real requests (a real 25-request burst that started returning 429 partway through; a real cross-origin preflight that got 403 with no `Access-Control-Allow-Origin` header), not just read from config.
+- **Logging replaced `console.*` in every file that's actually part of the running server's request/job lifecycle - deliberately not in `scripts/setupVectorSearchIndex.js`.** That's a one-off CLI tool a developer runs interactively; converting its output to structured JSON lines would make it *less* readable for the human running it, which defeats the point. A scope decision, recorded as one, not an oversight.
+- **Performance's bundle-size claim is a real before/after `npm run build` measurement**, not an estimate: 1,109.80 kB → 778.44 kB main bundle (a genuine ~30% reduction on every page load), with the map/graph code fetched only when that specific page is opened - then verified live through the real Vite dev server that both lazy-loaded pages actually render correctly with zero console errors, not just that the build succeeds.
+- **Deployment is honestly split between "real and ready" and "not actually done."** `render.yaml` is schema-checked (the IDE's live Render blueprint validator caught and corrected an actually-invalid first draft before it was ever committed), and `.env.example` is cross-checked against a real grep of every `process.env.*` read in the codebase - but no live deployment happened this session, because that requires a Render account/billing decision that isn't this session's to make. `TODO.md` §3 has the exact next steps for when that decision is made.
+- **A real gap was found live, after the main 9-step build, and fixed as an explicit same-phase follow-up**: verifying the audit-log endpoint's role gate required flipping a real test user to `role: 'viewer'` directly in the database, because `POST /auth/register` always creates a brand-new org with the caller as its admin - there was no real path for any org to ever gain a second member, let alone a viewer. `requireRole`'s logic was correct and unit-tested, but genuinely unreachable in practice. Fixed with `POST /org/invite-user` (admin-only, org-scoped) - a real, immediately-usable account provisioned directly by an admin, not an email-invite-link flow (that fuller UX is a named future enhancement in `TODO.md`, not required for the role to be reachable today). Verified both by 6 new automated tests driving the real app end to end, and live via `curl` against the real running server.
+- **Cleanup discipline held across every verification step this phase** (security-hardening burst test, audit-log role-gate test, lazy-load smoke test, the final end-to-end pass, and the `invite-user` follow-up) - `deleteOrgCascade` per batch, each verified live before and after, including a new `AuditLog`-specific orphan check. Final DB state after every real-server verification this phase: exactly the one real fixture org, 0 stray `AuditLog` rows.
+
+Full pass/fail verification of the main 9-step build is in [Phase 10 Complete — End-to-End Smoke Test](#-phase-10-complete--end-to-end-smoke-test-2026-08-10); every scope decision, the exact Render deployment next-steps, and the honest coverage boundaries above are tracked in `TODO.md` sections 1-5.
+
 ---
 
 # Phase 1 Audit — SupplyLens (Branch: `main`, Post-Merge)
@@ -680,6 +713,78 @@ Full pass/fail verification of all of the above is above; open items (Finance's 
 
 ---
 
+# ✅ Phase 9 Complete — End-to-End Smoke Test (2026-08-09)
+
+Every item from the Phase 9 plan above (Concentration & Redundancy View, Geographic Map, Relationship Explorer, Timeline Visualization, Risk Heatmaps) has been implemented and verified against real Atlas data through the real running UI - not just code review. This phase's central discipline was the same one Phase 8 established for a written summary, applied to a visualization instead: never let a view look more relationally-grounded or geographically precise than the underlying data actually supports.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Portfolio Timeline correctly merges multiple suppliers' real events | 🟢 PASS | 4 real suppliers (deliberately varied categories/countries) produced a correctly merged, correctly per-supplier-attributed chronological feed - narratives were built per-supplier before merging, confirmed not cross-contaminated between suppliers |
+| 2 | Geographic Map groups same-country suppliers and labels country-level honestly | 🟢 PASS | Map correctly showed grouped markers per country with accurate supplier/country counts; UI copy and API response both stated "country level" explicitly |
+| 3 | Risk Heatmap aggregates correctly per country | 🟢 PASS | Correct per-country average risk/health and supplier count, sorted highest-risk-first, matching the real underlying data by hand-check |
+| 4 | Concentration & Redundancy View never says "dependency graph" and its edge count is correct | 🟢 PASS | UI, API `scope` field, and Swagger docs all correctly state "Not a supply-chain dependency graph"; edge count/reasons hand-verified against the real 4-supplier test set and matched exactly |
+| 5 | Sole-source flagging matches Phase 7's existing definition | 🟢 PASS | `isSoleCategorySource`/`isSoleCountrySource` correctly matched `simulationService.computeConcentrationRisk`'s same boolean definition on the same test suppliers |
+| 6 | Cross-org isolation across all 4 new endpoints | 🟢 PASS | A second, freshly-registered org's direct API calls to `/org/timeline`, `/org/supplier-locations`, `/org/risk-heatmap`, `/org/concentration-graph` all correctly reflected only that org's own (near-empty) data - zero leakage from the first org's real test data |
+| 7 | Full smoke run through the real dashboard UI, zero console errors (Playwright) | 🟢 PASS | Register → seed 4 varied suppliers → navigate all 4 new visualizations via their real nav buttons → screenshot-confirmed correct rendering throughout, zero console/page errors across the entire session |
+
+This phase's test data (10 `phase9_test_*`/`phase9_*test_*` orgs created across all 4 build steps) was deleted via `deleteOrgCascade` in per-step batches rather than one deferred sweep, each batch verified with a live query before and after, plus a final comprehensive orphan-check across `RiskHistory`/`HealthHistory`/`Document`/`NewsCache` - all confirmed 0. Final DB state: exactly the one real fixture org.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 9, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Concentration & Redundancy View instead of a fabricated Supply Network Graph** - the single most consequential naming decision this phase. No supplier-to-supplier relationship data (parent/child, upstream/downstream, tiering) exists anywhere in this schema; a graph implying that kind of relationship from category/country tags alone would have misrepresented the data. Every edge is one of two real, traceable relationships instead - see `TODO.md` §2 for the full reasoning and what a *true* dependency graph would actually require.
+- **Country-level-only geography via a static centroid table, never precise addresses** - `Supplier.country` is the only location data this schema has anywhere; both the map and heatmap say so explicitly rather than implying more precision than exists.
+- **`react-leaflet` over the originally-planned `react-simple-maps`** - a real, evidence-based reversal: the latter failed `npm install` outright against React 19 (ERESOLVE), the former declared native React 19 support and installed cleanly. Recorded honestly as the real reason for the switch, not the originally-planned styling rationale.
+- **A sorted bar chart over a choropleth for the Risk Heatmap** - a true choropleth needs a real country-boundary GeoJSON asset this project doesn't have, and would render mostly empty at the current real data density; a bar chart is honest and legible at any density and needed no new dependency.
+- **Portfolio-Wide Timeline is genuinely new capability, not a restatement of Phase 4's existing per-supplier timeline** - the per-supplier view and its trend chart already existed and work correctly; the new part is pooling every supplier's events into one org-wide feed, the same "pool across suppliers" precedent as Phase 6's portfolio forecast.
+
+Full pass/fail verification of all of the above is above; open items (the concentration graph's edge-label overlap at high density, geocoding as a possible future enhancement, `similarityService.js`'s unvalidated weights now also driving graph edges) are tracked in `TODO.md` sections 3 and 4.
+
+---
+
+# ✅ Phase 10 Complete — End-to-End Smoke Test (2026-08-10)
+
+Every item from the Phase 10 plan above (Automated Testing, CI/CD, Docker, Security Hardening, Monitoring & Logging, Audit Logs, Performance Optimization, Deployment, Technical Documentation, plus RBAC as a deliberate no-op) has been implemented and verified - largely through genuinely new mechanisms (a real test suite, real CI runs, real containers) rather than the manual-only verification every prior phase relied on. This phase's own honesty discipline was about not overstating "enterprise readiness" itself: distinguishing what's genuinely production-grade from what's a real foundation still needing more work before an actual enterprise deployment.
+
+## Smoke Test Results
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Full automated test suite passes | 🟢 PASS | 47/47 tests, 5 suites, run repeatedly throughout the phase (not just once at the end) - auth flow, RBAC (including the live `invite-user` follow-up), cross-org isolation, scoring/forecast math |
+| 2 | CI actually runs and passes on GitHub, not just syntactically valid | 🟢 PASS | Watched real pushed runs via `gh run watch` - caught a real `npm ci` failure on Linux runners twice (Windows-generated lockfile drift), fixed and reconfirmed green both times |
+| 3 | Docker Compose stack is genuinely reachable and functional | 🟢 PASS | Built and ran all 3 containers; real register/login/suppliers calls through the actual running server container, connected to the actual containerized Mongo; client served the real built SPA; torn down cleanly afterward |
+| 4 | Rate limiting actually triggers under a real burst | 🟢 PASS | A real 25-request burst against `POST /auth/login` returned 401 (correct credential rejection) for the first several requests, then genuinely started returning 429 |
+| 5 | CORS actually rejects an unconfigured origin | 🟢 PASS | A real preflight from an allowed origin got back a matching `Access-Control-Allow-Origin` header and 204; the same preflight from an unconfigured origin got 403 with no CORS header at all |
+| 6 | Input validation actually rejects malformed input, including the real bug found | 🟢 PASS | Malformed email/short password on register, a non-object `alertThresholds` (the real crash bug - confirmed it used to 500, confirmed the fix returns a clean 400), and an invalid `supplierId` param all correctly returned `VALIDATION_ERROR` |
+| 7 | Health endpoints reflect real state | 🟢 PASS | `/api/health` and `/api/health/db` both returned real uptime/DB-connection data against the real running server |
+| 8 | Structured logging redacts secrets | 🟢 PASS | A real request with a fake bearer token produced a log line showing `"authorization":"[REDACTED]"`, not the real token value |
+| 9 | Audit logs are created with correct attribution and correctly scoped | 🟢 PASS | Real supplier create/update/delete and a risk-config update all produced correctly-attributed, correctly-ordered `AuditLog` entries; a `viewer`-role account got a clean 403 from the viewing endpoint; a second org saw zero entries |
+| 10 | Lazy-loaded pages render correctly with a measured bundle-size improvement | 🟢 PASS | Real `npm run build`: main bundle 1,109.80 kB → 778.44 kB; both lazy pages navigated through the real Vite dev server with zero console errors |
+| 11 | `render.yaml` is schema-valid | 🟢 PASS | Caught and corrected an actually-invalid first draft via the IDE's live Render blueprint validator before it was ever committed |
+| 12 | The `viewer`-role gap is genuinely closed, not just documented | 🟢 PASS | A real admin invited a real viewer via `POST /org/invite-user`; that viewer logged in for a real viewer-role token; the real token was genuinely blocked from an admin route (403) while still allowed read access (200) - live via `curl`, plus 6 new automated tests |
+| 13 | Full smoke run through the real dashboard UI end-to-end, zero console errors (Playwright) | 🟢 PASS | Register → create a real supplier → open all 4 Phase 9 visualizations → edit the supplier (creating a real audit-log entry) → direct API checks (health, audit-logs, security headers) → cross-org isolation check, all in one real-browser session, zero console/page errors throughout |
+
+This phase's test data (orgs created across the Security Hardening, Audit Logs, Performance, final end-to-end, and `invite-user` follow-up verification steps) was deleted via `deleteOrgCascade`, each batch verified with a live query before and after, including a new `AuditLog`-specific orphan check. Final DB state after every real-server verification this phase: exactly the one real fixture org, 1 user, 1 supplier, 0 stray `AuditLog` rows.
+
+## Key Decisions & Rationale
+
+Non-obvious calls made during Phase 10, kept here so the reasoning isn't lost once this stops being a live conversation:
+
+- **Automated Testing was built first and scoped as critical-path, stated explicitly rather than implied** - CI/CD would otherwise have nothing real to run, and comprehensive coverage of all 9 prior phases is an honest multi-session effort this phase never claimed to finish. See `TODO.md` §4 for the precise boundary.
+- **`mongodb-memory-server` over a persistent test-DB Atlas cluster** - a real, ephemeral mongod binary confirmed working in this environment before the rest of the suite was built around it, so no test ever touches the real dev/production database.
+- **RBAC deliberately left at 2 roles, then a real gap found live within that existing model was fixed as a same-phase follow-up.** The scope decision (no 3rd role, no resource-level permissions) and the bug fix (the `viewer` role had no real creation path at all) are two different things - the first is "don't build unmotivated granularity," the second is "make the granularity that already exists actually reachable." Conflating them would have been dishonest in the other direction - looking done when a real, load-bearing piece of the existing design didn't actually work yet.
+- **No caching layer was added - not currently motivated by real usage**, the same "don't build what isn't asked for by real evidence" discipline as the RBAC scope decision.
+- **Render over Railway/Fly.io** because one Blueprint file can define both the Node backend and the static frontend together; the other two would need two separate configs/deploys for this app's client+server split.
+- **Deployment config is real and ready but honestly not live** - going live needs an account/billing decision that isn't this session's to make. The exact next steps are in `TODO.md` §3, not left vague.
+- **`console.*` was replaced everywhere that's part of the running server, deliberately not in the one-off `setupVectorSearchIndex.js` CLI script** - a scope decision recorded as one, since structured JSON logs would make an interactively-run admin tool less readable for the human running it, not more.
+
+Full pass/fail verification of all of the above is above; every scope decision, the exact Render deployment next-steps, and the honest coverage/limitation boundaries are tracked in `TODO.md` sections 1 through 5.
+
+---
+
 # 🎯 Target Release
 
 | Version | Milestone |
@@ -693,7 +798,7 @@ Full pass/fail verification of all of the above is above; open items (Finance's 
 | v0.7 | Scenario Simulator |
 | v0.8 | Multi-Agent Intelligence |
 | v0.9 | Supply Chain Visualization |
-| v1.0 | Enterprise Release 🚀 |
+| v1.0 | Enterprise Release 🚀 — ✅ reached (2026-08-10, Phase 10 complete) |
 ---
 
 # Version Roadmap
