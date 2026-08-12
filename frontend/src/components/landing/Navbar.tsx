@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 
 const links = [
@@ -42,7 +43,9 @@ function Navbar() {
           ))}
         </nav>
 
-        <Button size="sm">Sign up</Button>
+        <Button size="sm" asChild>
+          <Link to="/dashboard">Sign up</Link>
+        </Button>
       </div>
     </header>
   )

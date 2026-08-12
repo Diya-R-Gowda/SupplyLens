@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import Reveal from "@/components/Reveal"
 import DashboardMockup from "@/components/landing/DashboardMockup"
@@ -16,7 +17,9 @@ function Hero() {
             every number.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button size="lg">Start free</Button>
+            <Button size="lg" asChild>
+              <Link to="/dashboard">Start free</Link>
+            </Button>
             <Button size="lg" variant="outline">
               View demo
             </Button>
