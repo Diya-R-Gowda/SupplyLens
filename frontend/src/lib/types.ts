@@ -66,3 +66,37 @@ export interface DashboardStats {
   growthSeries: GrowthPoint[]
   recentActivity: RecentActivityEntry[]
 }
+
+export interface DocumentRecord {
+  _id: string
+  supplierId: string
+  fileName: string
+  totalChunks: number
+  uploadedAt: string
+  gridFsFileId?: string
+}
+
+export type ChatRole = "user" | "assistant"
+
+export interface ChatMessage {
+  role: ChatRole
+  content: string
+  timestamp: string
+  // Source filenames only (server never returns a doc id here) - matched
+  // back against the loaded document list by filename to link a chip.
+  sources?: string[]
+}
+
+export interface Conversation {
+  _id: string
+  supplierId: string
+  messages: ChatMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AskResponse {
+  answer: string
+  conversationId: string
+  sources: string[]
+}
