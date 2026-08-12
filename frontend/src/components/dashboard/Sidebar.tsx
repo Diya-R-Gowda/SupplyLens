@@ -1,40 +1,53 @@
-import { useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
   Building2,
   BarChart3,
   FileText,
   Settings,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Suppliers", icon: Building2 },
+  { label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", exact: true },
+  { label: "Suppliers", icon: Building2, to: "/dashboard/suppliers", exact: false },
+]
+
+const comingSoonItems = [
   { label: "Analytics", icon: BarChart3 },
   { label: "Reports", icon: FileText },
   { label: "Settings", icon: Settings },
 ]
 
 function Sidebar() {
-  const [active, setActive] = useState("Dashboard")
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { logout } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate("/")
+  }
 
   return (
     <aside className="hidden h-svh w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
       <div className="flex h-16 items-center border-b border-border px-6">
-        <span className="text-base font-semibold tracking-tight">
+        <Link to="/dashboard" className="text-base font-semibold tracking-tight">
           SupplyLens
-        </span>
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
-          const isActive = item.label === active
+          const isActive = item.exact
+            ? location.pathname === item.to
+            : location.pathname.startsWith(item.to)
           return (
-            <button
+            <Link
               key={item.label}
-              type="button"
-              onClick={() => setActive(item.label)}
+              to={item.to}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 ease-out",
                 isActive
@@ -44,10 +57,38 @@ function Sidebar() {
             >
               <item.icon className="size-4 shrink-0" />
               {item.label}
-            </button>
+            </Link>
           )
         })}
+
+        <div className="my-2 border-t border-border" />
+
+        {comingSoonItems.map((item) => (
+          <div
+            key={item.label}
+            className="flex w-full cursor-not-allowed items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/50"
+          >
+            <span className="flex items-center gap-3">
+              <item.icon className="size-4 shrink-0" />
+              {item.label}
+            </span>
+            <span className="text-[10px] font-medium tracking-wide uppercase">
+              Soon
+            </span>
+          </div>
+        ))}
       </nav>
+
+      <div className="border-t border-border p-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted hover:text-foreground"
+        >
+          <LogOut className="size-4 shrink-0" />
+          Log out
+        </button>
+      </div>
     </aside>
   )
 }

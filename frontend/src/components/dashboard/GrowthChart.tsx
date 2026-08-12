@@ -7,29 +7,20 @@ import {
   YAxis,
   Tooltip,
 } from "recharts"
+import type { GrowthPoint } from "@/lib/types"
 
-const data = [
-  { date: "Jan", visitors: 2100 },
-  { date: "Feb", visitors: 2450 },
-  { date: "Mar", visitors: 2300 },
-  { date: "Apr", visitors: 2800 },
-  { date: "May", visitors: 3050 },
-  { date: "Jun", visitors: 2900 },
-  { date: "Jul", visitors: 3400 },
-  { date: "Aug", visitors: 3650 },
-  { date: "Sep", visitors: 3500 },
-  { date: "Oct", visitors: 3900 },
-  { date: "Nov", visitors: 4150 },
-  { date: "Dec", visitors: 4400 },
-]
+function formatTick(date: string) {
+  const d = new Date(`${date}T00:00:00`)
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
 
-function TrafficChart() {
+function GrowthChart({ data }: { data: GrowthPoint[] }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="mb-4">
-        <h3 className="text-sm font-medium">Traffic over time</h3>
+        <h3 className="text-sm font-medium">Supplier growth</h3>
         <p className="text-xs text-muted-foreground">
-          Unique visitors, last 12 months
+          New suppliers added, last 30 days
         </p>
       </div>
 
@@ -43,16 +34,20 @@ function TrafficChart() {
             />
             <XAxis
               dataKey="date"
+              tickFormatter={formatTick}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+              minTickGap={24}
             />
             <YAxis
+              allowDecimals={false}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
             />
             <Tooltip
+              labelFormatter={(label) => formatTick(String(label))}
               contentStyle={{
                 background: "var(--card)",
                 border: "1px solid var(--border)",
@@ -64,7 +59,8 @@ function TrafficChart() {
             />
             <Line
               type="monotone"
-              dataKey="visitors"
+              dataKey="count"
+              name="New suppliers"
               stroke="var(--primary)"
               strokeWidth={2}
               dot={false}
@@ -80,4 +76,4 @@ function TrafficChart() {
   )
 }
 
-export default TrafficChart
+export default GrowthChart

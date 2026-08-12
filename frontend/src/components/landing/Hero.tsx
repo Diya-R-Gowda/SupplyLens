@@ -18,7 +18,7 @@ function Hero() {
           </p>
           <div className="flex flex-wrap gap-3">
             <Button size="lg" asChild>
-              <Link to="/dashboard">Start free</Link>
+              <Link to="/login">Start free</Link>
             </Button>
             <Button size="lg" variant="outline">
               View demo

@@ -11,6 +11,7 @@ function MetricCard({
   prefix,
   suffix,
   change,
+  hint,
 }: {
   icon: LucideIcon
   label: string
@@ -18,9 +19,11 @@ function MetricCard({
   decimals?: number
   prefix?: string
   suffix?: string
-  change: number
+  change?: number
+  hint?: string
 }) {
-  const isPositive = change >= 0
+  const hasChange = change !== undefined
+  const isPositive = (change ?? 0) >= 0
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/40">
@@ -33,19 +36,25 @@ function MetricCard({
         <AnimatedNumber value={value} decimals={decimals} prefix={prefix} suffix={suffix} />
       </div>
 
-      <div
-        className={cn(
-          "mt-2 flex items-center gap-1 text-xs font-medium",
-          isPositive ? "text-emerald-700" : "text-red-700"
-        )}
-      >
-        {isPositive ? (
-          <ArrowUpRight className="size-3.5" />
-        ) : (
-          <ArrowDownRight className="size-3.5" />
-        )}
-        <span>{Math.abs(change)}% vs last month</span>
-      </div>
+      {hasChange && (
+        <div
+          className={cn(
+            "mt-2 flex items-center gap-1 text-xs font-medium",
+            isPositive ? "text-emerald-700" : "text-red-700"
+          )}
+        >
+          {isPositive ? (
+            <ArrowUpRight className="size-3.5" />
+          ) : (
+            <ArrowDownRight className="size-3.5" />
+          )}
+          <span>{Math.abs(change ?? 0)}% vs last month</span>
+        </div>
+      )}
+
+      {!hasChange && hint && (
+        <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+      )}
     </div>
   )
 }

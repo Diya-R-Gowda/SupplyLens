@@ -44,7 +44,7 @@ function Navbar() {
         </nav>
 
         <Button size="sm" asChild>
-          <Link to="/dashboard">Sign up</Link>
+          <Link to="/login">Sign up</Link>
         </Button>
       </div>
     </header>
