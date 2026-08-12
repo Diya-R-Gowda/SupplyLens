@@ -1,12 +1,7 @@
-import Layout from "@/components/Layout"
-import Home from "@/pages/Home"
+import Landing from "@/pages/Landing"
 
 function App() {
-  return (
-    <Layout>
-      <Home />
-    </Layout>
-  )
+  return <Landing />
 }
 
 export default App
