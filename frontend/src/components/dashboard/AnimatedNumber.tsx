@@ -19,7 +19,7 @@ function AnimatedNumber({
 
   useEffect(() => {
     const controls = animate(count, value, {
-      duration: 1.2,
+      duration: 0.9,
       ease: "easeOut",
     })
     return controls.stop

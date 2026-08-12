@@ -23,7 +23,7 @@ function MetricCard({
   const isPositive = change >= 0
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/40">
+    <div className="rounded-xl border border-border bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/40">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{label}</span>
         <Icon className="size-4 text-primary" />
@@ -36,7 +36,7 @@ function MetricCard({
       <div
         className={cn(
           "mt-2 flex items-center gap-1 text-xs font-medium",
-          isPositive ? "text-emerald-600" : "text-red-600"
+          isPositive ? "text-emerald-700" : "text-red-700"
         )}
       >
         {isPositive ? (

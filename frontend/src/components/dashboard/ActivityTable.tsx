@@ -50,7 +50,7 @@ function ActivityTable() {
             {activity.map((row, i) => (
               <tr
                 key={i}
-                className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                className="border-b border-border/60 transition-colors duration-200 ease-out last:border-0 hover:bg-muted/50"
               >
                 <td className="py-3 pr-4">{row.event}</td>
                 <td className="py-3 pr-4 text-muted-foreground">

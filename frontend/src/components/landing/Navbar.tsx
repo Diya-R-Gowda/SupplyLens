@@ -20,7 +20,7 @@ function Navbar() {
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b transition-colors duration-300 ${
+      className={`sticky top-0 z-50 border-b transition-colors duration-200 ease-out ${
         scrolled
           ? "border-border bg-background/80 backdrop-blur-md"
           : "border-transparent bg-transparent"
@@ -36,7 +36,7 @@ function Navbar() {
             <a
               key={link.href}
               href={link.href}
-              className="transition-colors hover:text-foreground"
+              className="transition-colors duration-200 ease-out hover:text-foreground"
             >
               {link.label}
             </a>

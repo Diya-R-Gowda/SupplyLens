@@ -36,7 +36,7 @@ function Sidebar() {
               type="button"
               onClick={() => setActive(item.label)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 ease-out",
                 isActive
                   ? "bg-primary/10 font-medium text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"

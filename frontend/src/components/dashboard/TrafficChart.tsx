@@ -70,7 +70,7 @@ function TrafficChart() {
               dot={false}
               activeDot={{ r: 4 }}
               isAnimationActive
-              animationDuration={1500}
+              animationDuration={1000}
               animationEasing="ease-out"
             />
           </LineChart>
