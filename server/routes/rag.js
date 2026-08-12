@@ -22,7 +22,7 @@ const isDemoMode = () => mongoose.connection.readyState !== 1;
 const askQuestionValidation = [
   param('supplierId').isMongoId().withMessage('supplierId must be a valid id'),
   body('question').optional().isString().trim().isLength({ min: 1, max: 2000 }).withMessage('question must be a non-empty string of at most 2000 characters'),
-  body('conversationId').optional().isMongoId().withMessage('conversationId must be a valid id'),
+  body('conversationId').optional({ nullable: true }).isMongoId().withMessage('conversationId must be a valid id'),
 ];
 
 /**
