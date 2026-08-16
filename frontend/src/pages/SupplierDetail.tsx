@@ -6,12 +6,29 @@ import { Skeleton } from "@/components/ui/skeleton"
 import ErrorState from "@/components/ErrorState"
 import DocumentsPanel from "@/components/supplier/DocumentsPanel"
 import ChatPanel from "@/components/supplier/ChatPanel"
+import NewsPanel from "@/components/supplier/NewsPanel"
+import DigitalTwinPanel from "@/components/supplier/DigitalTwinPanel"
+import RiskHealthTrendChart from "@/components/supplier/RiskHealthTrendChart"
+import ForecastPanel from "@/components/supplier/ForecastPanel"
+import ScenarioSimulatorPanel from "@/components/supplier/ScenarioSimulatorPanel"
+import AgentsPanel from "@/components/supplier/AgentsPanel"
+import SnapshotPanel from "@/components/supplier/SnapshotPanel"
+import RiskBadge from "@/components/badges/RiskBadge"
+import HealthBadge from "@/components/badges/HealthBadge"
 import { useAuth } from "@/lib/auth"
 import { deleteSupplier, getSupplier } from "@/lib/suppliers"
 import { listDocuments } from "@/lib/documents"
+import { getTwin, getRiskHealthHistory } from "@/lib/twin"
+import { getSupplierForecast } from "@/lib/forecast"
 import { getErrorMessage } from "@/lib/errors"
 import { formatCategory, formatDate } from "@/lib/format"
-import type { DocumentRecord, Supplier } from "@/lib/types"
+import type {
+  DocumentRecord,
+  ForecastBundle,
+  RiskHealthHistory,
+  Supplier,
+  SupplierTwin,
+} from "@/lib/types"
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -36,6 +53,13 @@ function SupplierDetail() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(true)
   const [documentsError, setDocumentsError] = useState("")
+
+  const [twin, setTwin] = useState<SupplierTwin | null>(null)
+  const [twinLoading, setTwinLoading] = useState(true)
+  const [twinError, setTwinError] = useState("")
+
+  const [history, setHistory] = useState<RiskHealthHistory | null>(null)
+  const [forecast, setForecast] = useState<ForecastBundle | null>(null)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -65,10 +89,54 @@ function SupplierDetail() {
     }
   }, [id])
 
+  const loadTwin = useCallback(async () => {
+    if (!id) return
+    setTwinLoading(true)
+    setTwinError("")
+    try {
+      const data = await getTwin(id)
+      setTwin(data)
+    } catch (err) {
+      setTwinError(getErrorMessage(err, "Couldn't load the digital twin"))
+    } finally {
+      setTwinLoading(false)
+    }
+  }, [id])
+
+  const loadHistory = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await getRiskHealthHistory(id, { limit: 30 })
+      setHistory(data)
+    } catch {
+      setHistory(null)
+    }
+  }, [id])
+
+  const loadForecast = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await getSupplierForecast(id)
+      setForecast(data)
+    } catch {
+      setForecast(null)
+    }
+  }, [id])
+
+  const refreshAll = useCallback(() => {
+    load()
+    loadTwin()
+    loadHistory()
+    loadForecast()
+  }, [load, loadTwin, loadHistory, loadForecast])
+
   useEffect(() => {
     load()
     loadDocuments()
-  }, [load, loadDocuments])
+    loadTwin()
+    loadHistory()
+    loadForecast()
+  }, [load, loadDocuments, loadTwin, loadHistory, loadForecast])
 
   const handleDelete = async () => {
     if (!supplier) return
@@ -108,34 +176,34 @@ function SupplierDetail() {
                 </p>
               </div>
 
-              {isAdmin && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to={`/dashboard/suppliers/${supplier._id}/edit`}>
-                      <Pencil className="size-4" />
-                      Edit
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={deleting}
-                    onClick={handleDelete}
-                  >
-                    <Trash2 className="size-4 text-red-700" />
-                    Delete
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {supplier.riskScore != null && <RiskBadge score={supplier.riskScore} />}
+                {supplier.healthScore != null && <HealthBadge score={supplier.healthScore} />}
+
+                {isAdmin && (
+                  <div className="ml-2 flex gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/dashboard/suppliers/${supplier._id}/edit`}>
+                        <Pencil className="size-4" />
+                        Edit
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={deleting}
+                      onClick={handleDelete}
+                    >
+                      <Trash2 className="size-4 text-red-700" />
+                      Delete
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-border pt-6 sm:grid-cols-3">
               <Field label="Country" value={supplier.country} />
-              <Field label="Risk score" value={String(supplier.riskScore ?? "—")} />
-              <Field
-                label="Health score"
-                value={String(supplier.healthScore ?? "—")}
-              />
               <Field label="Payment terms" value={supplier.paymentTerms || "—"} />
               <Field label="Contract expiry" value={formatDate(supplier.contractExpiry)} />
               <Field label="Added" value={formatDate(supplier.createdAt)} />
@@ -153,6 +221,30 @@ function SupplierDetail() {
             />
             <ChatPanel supplierId={supplier._id} documents={documents} />
           </div>
+
+          <NewsPanel supplierId={supplier._id} />
+
+          {twinLoading && <Skeleton className="h-48 rounded-xl" />}
+          {!twinLoading && twinError && <ErrorState message={twinError} onRetry={loadTwin} />}
+          {!twinLoading && !twinError && twin && (
+            <DigitalTwinPanel supplierId={supplier._id} twin={twin} onRefresh={refreshAll} />
+          )}
+
+          {history && (
+            <RiskHealthTrendChart riskItems={history.risk.items} healthItems={history.health.items} />
+          )}
+
+          <ForecastPanel
+            title="Risk & health forecast"
+            subtitle="A hand-rolled linear projection from this supplier's own history — not a guarantee, and honestly gated below a minimum real, time-spread sample."
+            forecast={forecast}
+          />
+
+          <ScenarioSimulatorPanel supplierId={supplier._id} isAdmin={isAdmin} />
+
+          <AgentsPanel supplierId={supplier._id} />
+
+          <SnapshotPanel supplierId={supplier._id} />
         </>
       )}
     </div>
