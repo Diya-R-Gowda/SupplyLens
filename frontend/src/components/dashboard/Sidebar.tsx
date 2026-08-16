@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Building2,
   BarChart3,
-  FileText,
   Settings,
   LogOut,
 } from "lucide-react"
@@ -13,12 +12,8 @@ import { useAuth } from "@/lib/auth"
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", exact: true },
   { label: "Suppliers", icon: Building2, to: "/dashboard/suppliers", exact: false },
-]
-
-const comingSoonItems = [
-  { label: "Analytics", icon: BarChart3 },
-  { label: "Reports", icon: FileText },
-  { label: "Settings", icon: Settings },
+  { label: "Analytics", icon: BarChart3, to: "/dashboard/analytics", exact: false },
+  { label: "Settings", icon: Settings, to: "/dashboard/settings", exact: false },
 ]
 
 function Sidebar() {
@@ -60,23 +55,6 @@ function Sidebar() {
             </Link>
           )
         })}
-
-        <div className="my-2 border-t border-border" />
-
-        {comingSoonItems.map((item) => (
-          <div
-            key={item.label}
-            className="flex w-full cursor-not-allowed items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/50"
-          >
-            <span className="flex items-center gap-3">
-              <item.icon className="size-4 shrink-0" />
-              {item.label}
-            </span>
-            <span className="text-[10px] font-medium tracking-wide uppercase">
-              Soon
-            </span>
-          </div>
-        ))}
       </nav>
 
       <div className="border-t border-border p-3">

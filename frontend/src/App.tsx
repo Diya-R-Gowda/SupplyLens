@@ -6,6 +6,12 @@ import DashboardOverview from "@/pages/DashboardOverview"
 import SupplierList from "@/pages/SupplierList"
 import SupplierDetail from "@/pages/SupplierDetail"
 import SupplierForm from "@/pages/SupplierForm"
+import Settings from "@/pages/Settings"
+import AnalyticsLayout from "@/pages/analytics/AnalyticsLayout"
+import ConcentrationGraph from "@/pages/analytics/ConcentrationGraph"
+import GeographicMap from "@/pages/analytics/GeographicMap"
+import PortfolioTimeline from "@/pages/analytics/PortfolioTimeline"
+import RiskHeatmap from "@/pages/analytics/RiskHeatmap"
 import PageTransition from "@/components/PageTransition"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import DashboardLayout from "@/components/dashboard/DashboardLayout"
@@ -56,6 +62,13 @@ function App() {
           <Route path="suppliers/new" element={<SupplierForm />} />
           <Route path="suppliers/:id" element={<SupplierDetail />} />
           <Route path="suppliers/:id/edit" element={<SupplierForm />} />
+          <Route path="analytics" element={<AnalyticsLayout />}>
+            <Route index element={<ConcentrationGraph />} />
+            <Route path="map" element={<GeographicMap />} />
+            <Route path="timeline" element={<PortfolioTimeline />} />
+            <Route path="heatmap" element={<RiskHeatmap />} />
+          </Route>
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </AnimatePresence>

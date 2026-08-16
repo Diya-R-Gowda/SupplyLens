@@ -3,16 +3,19 @@ import { Users, ShieldAlert, HeartPulse, UserPlus } from "lucide-react"
 import MetricCard from "@/components/dashboard/MetricCard"
 import GrowthChart from "@/components/dashboard/GrowthChart"
 import ActivityTable from "@/components/dashboard/ActivityTable"
+import ForecastPanel from "@/components/supplier/ForecastPanel"
 import ErrorState from "@/components/ErrorState"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getDashboardStats } from "@/lib/dashboard"
+import { getOrgForecast } from "@/lib/forecast"
 import { getErrorMessage } from "@/lib/errors"
-import type { DashboardStats } from "@/lib/types"
+import type { DashboardStats, ForecastBundle } from "@/lib/types"
 
 function DashboardOverview() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [forecast, setForecast] = useState<ForecastBundle | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -29,6 +32,9 @@ function DashboardOverview() {
 
   useEffect(() => {
     load()
+    getOrgForecast()
+      .then(setForecast)
+      .catch(() => setForecast(null))
   }, [load])
 
   if (loading) {
@@ -80,6 +86,12 @@ function DashboardOverview() {
       </div>
 
       <GrowthChart data={stats.growthSeries} />
+
+      <ForecastPanel
+        title="Portfolio risk & health forecast"
+        subtitle="Pooled across every supplier's real score history — honestly gated below a minimum sample."
+        forecast={forecast}
+      />
 
       <ActivityTable activity={stats.recentActivity} />
     </>
