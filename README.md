@@ -280,8 +280,8 @@ Node Cron automatically performs scheduled tasks:
 See [TODO.md](TODO.md) for the full, honest list of open items and known limitations. Highlights:
 
 - Actual live deployment - `render.yaml` and Docker are ready; going live needs a real Render account/billing decision only you can make
-- Per-supplier (rather than country-level) geolocation, if precise mapping is ever needed
 - A true multi-tier dependency graph, if real supplier-to-supplier relationship data is ever captured
+- Alert-breach notifications are email-only for now; SMS is a real but unbuilt v2 candidate
 
 ---
 

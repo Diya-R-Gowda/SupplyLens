@@ -14,6 +14,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimit');
 const newsCron = require('./jobs/newsCron');
 const snapshotCron = require('./jobs/snapshotCron');
+const alertCron = require('./jobs/alertCron');
 const app = express();
 
 app.use(helmet());
@@ -59,6 +60,7 @@ if (require.main === module) {
 		app.listen(PORT, () => logger.info({ port: PORT }, 'Server running'));
 		newsCron.start();
 		snapshotCron.start();
+		alertCron.start();
 	});
 }
 
