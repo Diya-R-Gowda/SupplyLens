@@ -4,7 +4,7 @@
 # a single blueprint file can define a Node web service AND a static site
 # together (Railway's config is more single-service-oriented; Fly.io's
 # fly.toml targets one app per file, needing two separate configs/deploys
-# for client+server here) - one file, one blueprint, both halves of the app.
+# for frontend+server here) - one file, one blueprint, both halves of the app.
 #
 # This file is a real, complete config, not a placeholder - schema-validated
 # (both the `runtime` values and the single `services` array holding both
@@ -37,15 +37,15 @@ services:
         sync: false
       - key: CORS_ORIGIN
         # Set to the deployed static site's real URL once known (Render
-        # assigns it on first deploy) - e.g. https://supplylens-client.onrender.com
+        # assigns it on first deploy) - e.g. https://supplylens-frontend.onrender.com
         sync: false
       - key: LOG_LEVEL
         value: info
 
   - type: web
-    name: supplylens-client
+    name: supplylens-frontend
     runtime: static
-    rootDir: client
+    rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
@@ -54,8 +54,10 @@ services:
         # assigns it on first deploy) - e.g. https://supplylens-server.onrender.com/api
         sync: false
     routes:
-      # Single real HTML entry point (no react-router) - see client/nginx.conf's
-      # identical reasoning for the Docker deployment path.
+      # Load-bearing, not just insurance: frontend/ has real react-router-dom
+      # routes (App.tsx), so a direct load/refresh on any nested route (e.g.
+      # /dashboard/suppliers/123) depends on this rewrite to not 404 - see
+      # frontend/nginx.conf's identical reasoning for the Docker path.
       - type: rewrite
         source: /*
         destination: /index.html

@@ -31,9 +31,9 @@ services:
     depends_on:
       - mongo
 
-  client:
+  frontend:
     build:
-      context: ./client
+      context: ./frontend
       args:
         # Browser-side code talks to the server via the host's published
         # port, not the Docker-internal service name - the browser runs on
