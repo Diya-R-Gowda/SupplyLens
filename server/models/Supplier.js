@@ -82,6 +82,20 @@ const supplierSchema = new mongoose.Schema({
     dependencyNotes: { type: String, trim: true, maxlength: 500 },
     updatedAt: Date,
   },
+  // Optional precise location, separate from the required `country` fallback
+  // above - `country` always stays the honest default (geoLocationService.js
+  // falls back to it whenever this is absent). Two ways in, never blended:
+  // an address geocoded via Nominatim (source: 'nominatim'), or coordinates
+  // entered directly by a user who already knows them (source: 'manual',
+  // skips geocoding entirely) - same "real input vs. derived estimate,
+  // always labeled which is which" precedent as `businessImpact` above.
+  location: {
+    address: { type: String, trim: true, maxlength: 300 },
+    lat: { type: Number, min: -90, max: 90 },
+    lng: { type: Number, min: -180, max: 180 },
+    source: { type: String, enum: ['nominatim', 'manual'] },
+    geocodedAt: Date,
+  },
 }, { timestamps: true });
 
 // Every existing query filters by orgId (routes/suppliers.js); this compound index

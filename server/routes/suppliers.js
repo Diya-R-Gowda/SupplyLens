@@ -8,6 +8,7 @@ const Supplier = require('../models/Supplier');
 const Document = require('../models/Document');
 const Conversation = require('../models/Conversation');
 const { openDownloadStream } = require('../services/gridfsService');
+const { geocodeAddress } = require('../services/geocodingService');
 const { deleteSupplierCascade } = require('../services/supplierCascadeService');
 const { getSupplierForecast } = require('../services/predictiveAnalyticsService');
 const { simulateSupplierFailure } = require('../services/simulationService');
@@ -85,6 +86,14 @@ const businessFieldsValidation = [
   body('estimatedAnnualSpend').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Estimated annual spend must be a non-negative number').toFloat(),
   body('criticalityRating').optional({ nullable: true }).isInt({ min: 1, max: 5 }).withMessage('Criticality rating must be an integer from 1 to 5').toInt(),
   body('dependencyNotes').optional({ nullable: true }).trim().isLength({ max: 500 }).withMessage('Dependency notes must be at most 500 characters'),
+];
+
+// Exactly one of (address) or (lat AND lng) - never both, so it's always
+// unambiguous which path (geocode vs. manual) produced the stored point.
+const locationValidation = [
+  body('address').optional({ nullable: true }).trim().isLength({ min: 1, max: 300 }).withMessage('Address must be between 1 and 300 characters'),
+  body('lat').optional({ nullable: true }).isFloat({ min: -90, max: 90 }).withMessage('lat must be between -90 and 90').toFloat(),
+  body('lng').optional({ nullable: true }).isFloat({ min: -180, max: 180 }).withMessage('lng must be between -180 and 180').toFloat(),
 ];
 
 const SUPPLIER_NOT_FOUND = () => new ApiError('Supplier not found', 404, 'SUPPLIER_NOT_FOUND');
@@ -1754,6 +1763,103 @@ router.patch('/:id/business-fields', auth, requireRole('admin'), validate(busine
   });
 
   return sendSuccess(res, supplier.businessImpact);
+}));
+
+/**
+ * @swagger
+ * /suppliers/{id}/location:
+ *   patch:
+ *     summary: Set this supplier's precise location - a geocoded address or manual coordinates (admin only)
+ *     description: >
+ *       Two ways in, never both in the same request: `address` (geocoded server-side via
+ *       OpenStreetMap Nominatim, a keyless public service - source becomes `'nominatim'`), or
+ *       `lat`+`lng` together (entered directly, no geocoding call - source becomes `'manual'`).
+ *       `country` remains the required fallback used whenever no precise location is set;
+ *       `GET /org/analytics/supplier-locations` prefers this precise point over the country
+ *       centroid once present. If geocoding an address finds no match, returns 422 rather than
+ *       silently falling back to the country centroid - the caller should know the address didn't
+ *       resolve. Not available in demo mode.
+ *     tags: [Suppliers]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               address: { type: string, example: '1600 Amphitheatre Parkway, Mountain View, CA' }
+ *               lat: { type: number, example: 37.4220 }
+ *               lng: { type: number, example: -122.0841 }
+ *     responses:
+ *       200:
+ *         description: Updated location
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Neither address nor lat+lng provided, both provided at once, or not available in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       403:
+ *         description: Caller is authenticated but not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No such supplier in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       422:
+ *         description: Address provided but Nominatim found no match for it
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.patch('/:id/location', auth, requireRole('admin'), validate(locationValidation), asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Supplier location is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const { address, lat, lng } = req.body;
+  const hasAddress = address !== undefined && address !== null && address !== '';
+  const hasManualCoords = lat !== undefined && lng !== undefined;
+
+  if (hasAddress === hasManualCoords) {
+    throw new ApiError('Provide either address, or lat and lng together, not both', 400, 'INVALID_LOCATION_INPUT');
+  }
+
+  const supplier = await findOrgSupplier(req.params.id, req.user.orgId); // 404s if missing/cross-org
+
+  if (hasManualCoords) {
+    supplier.location = { lat, lng, source: 'manual', geocodedAt: new Date() };
+  } else {
+    const coords = await geocodeAddress(address);
+    if (!coords) {
+      throw new ApiError('Could not find a location for that address', 422, 'GEOCODE_NO_MATCH');
+    }
+    supplier.location = { address, lat: coords.lat, lng: coords.lng, source: 'nominatim', geocodedAt: new Date() };
+  }
+
+  await supplier.save();
+
+  await recordAuditLog({
+    orgId: req.user.orgId, userId: req.user.id, action: 'supplier.location_updated', targetType: 'Supplier', targetId: supplier._id, detail: { source: supplier.location.source },
+  });
+
+  return sendSuccess(res, supplier.location);
 }));
 
 /**

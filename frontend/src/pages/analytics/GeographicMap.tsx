@@ -18,7 +18,9 @@ interface CountryGroup {
 function groupByCountry(suppliers: SupplierLocation[]): CountryGroup[] {
   const groups = new Map<string, CountryGroup>()
   for (const s of suppliers) {
-    if (!s.locatable || s.lat == null || s.lng == null) continue
+    // Exact-location suppliers render as their own individual markers below,
+    // not folded into their country's group circle.
+    if (!s.locatable || s.lat == null || s.lng == null || s.locationPrecision === "exact") continue
     const existing = groups.get(s.country)
     if (existing) {
       existing.suppliers.push(s)
@@ -57,6 +59,10 @@ function GeographicMap() {
   }, [load])
 
   const groups = useMemo(() => (data ? groupByCountry(data.suppliers) : []), [data])
+  const exactSuppliers = useMemo(
+    () => (data ? data.suppliers.filter((s) => s.locationPrecision === "exact" && s.lat != null && s.lng != null) : []),
+    [data]
+  )
 
   if (loading) return <Skeleton className="h-[32rem] rounded-xl" />
   if (error) return <ErrorState message={error} onRetry={load} />
@@ -65,9 +71,12 @@ function GeographicMap() {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-        Country-level approximation only — every supplier from the same country renders at the
-        same point. {data.countriesRepresented} countries represented
+        {data.exactCount > 0
+          ? `${data.exactCount} supplier(s) shown at their exact location; the rest are country-level approximations (every supplier from the same country renders at the same point).`
+          : "Country-level approximation only — every supplier from the same country renders at the same point."}{" "}
+        {data.countriesRepresented} countries represented
         {data.unlocatableCount > 0 && `, ${data.unlocatableCount} supplier(s) without a recognized country code`}.
+        Geocoding data © OpenStreetMap contributors.
       </div>
       <div className="h-[32rem] overflow-hidden rounded-xl border border-border">
         <MapContainer center={[20, 0]} zoom={2} style={{ height: "100%", width: "100%" }}>
@@ -93,6 +102,19 @@ function GeographicMap() {
                     </li>
                   ))}
                 </ul>
+              </Popup>
+            </CircleMarker>
+          ))}
+          {exactSuppliers.map((s) => (
+            <CircleMarker
+              key={s.supplierId}
+              center={[s.lat as number, s.lng as number]}
+              radius={7}
+              pathOptions={{ color: "#b45309", fillColor: "#b45309", fillOpacity: 0.7 }}
+            >
+              <Popup>
+                <p className="font-medium">{s.name}</p>
+                <p>Exact location — risk {s.riskScore}</p>
               </Popup>
             </CircleMarker>
           ))}

@@ -1,5 +1,5 @@
 import api from "@/lib/api"
-import type { Pagination, Supplier, SupplierInput } from "@/lib/types"
+import type { Pagination, Supplier, SupplierInput, SupplierLocationDetail } from "@/lib/types"
 
 export interface ListSuppliersParams {
   search?: string
@@ -36,4 +36,18 @@ export async function updateSupplier(id: string, input: Partial<SupplierInput>):
 
 export async function deleteSupplier(id: string): Promise<void> {
   await api.delete(`/suppliers/${id}`)
+}
+
+// Exactly one of (address) or (lat + lng) - never both. Geocoding an address
+// happens server-side (Nominatim); manual coordinates are stored as-is.
+export type UpdateSupplierLocationInput =
+  | { address: string }
+  | { lat: number; lng: number }
+
+export async function updateSupplierLocation(
+  id: string,
+  input: UpdateSupplierLocationInput
+): Promise<SupplierLocationDetail> {
+  const { data } = await api.patch(`/suppliers/${id}/location`, input)
+  return data.data as SupplierLocationDetail
 }

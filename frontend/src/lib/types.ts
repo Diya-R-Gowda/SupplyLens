@@ -26,6 +26,7 @@ export interface Supplier {
   orgId: string
   createdAt: string
   updatedAt: string
+  location?: SupplierLocationDetail
 }
 
 export interface SupplierInput {
@@ -569,6 +570,9 @@ export interface SupplierLocation {
   lat: number | null
   lng: number | null
   locatable: boolean
+  // "exact" = supplier.location's own geocoded/manual coordinates were used;
+  // "country" = the country-centroid fallback.
+  locationPrecision: "exact" | "country"
 }
 
 export interface SupplierLocationsData {
@@ -576,7 +580,18 @@ export interface SupplierLocationsData {
   totalSuppliers: number
   countriesRepresented: number
   unlocatableCount: number
-  granularity: "country_centroid"
+  exactCount: number
+  granularity: "country_centroid" | "mixed"
+}
+
+export type LocationSource = "nominatim" | "manual"
+
+export interface SupplierLocationDetail {
+  address?: string
+  lat: number
+  lng: number
+  source: LocationSource
+  geocodedAt: string
 }
 
 export interface TimelineEvent {

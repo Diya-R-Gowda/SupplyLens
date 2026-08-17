@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import ErrorState from "@/components/ErrorState"
 import DocumentsPanel from "@/components/supplier/DocumentsPanel"
@@ -16,7 +17,7 @@ import SnapshotPanel from "@/components/supplier/SnapshotPanel"
 import RiskBadge from "@/components/badges/RiskBadge"
 import HealthBadge from "@/components/badges/HealthBadge"
 import { useAuth } from "@/lib/auth"
-import { deleteSupplier, getSupplier } from "@/lib/suppliers"
+import { deleteSupplier, getSupplier, updateSupplierLocation } from "@/lib/suppliers"
 import { listDocuments } from "@/lib/documents"
 import { getTwin, getRiskHealthHistory } from "@/lib/twin"
 import { getSupplierForecast } from "@/lib/forecast"
@@ -49,6 +50,12 @@ function SupplierDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [deleting, setDeleting] = useState(false)
+
+  const [editingLocation, setEditingLocation] = useState(false)
+  const [locationMode, setLocationMode] = useState<"address" | "manual">("address")
+  const [locationForm, setLocationForm] = useState({ address: "", lat: "", lng: "" })
+  const [savingLocation, setSavingLocation] = useState(false)
+  const [locationError, setLocationError] = useState("")
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(true)
@@ -151,6 +158,33 @@ function SupplierDetail() {
     }
   }
 
+  const handleSaveLocation = async () => {
+    if (!supplier) return
+    setSavingLocation(true)
+    setLocationError("")
+    try {
+      const location =
+        locationMode === "address"
+          ? await updateSupplierLocation(supplier._id, { address: locationForm.address })
+          : await updateSupplierLocation(supplier._id, {
+              lat: Number(locationForm.lat),
+              lng: Number(locationForm.lng),
+            })
+      setSupplier({ ...supplier, location })
+      setEditingLocation(false)
+      setLocationForm({ address: "", lat: "", lng: "" })
+    } catch (err) {
+      setLocationError(
+        getErrorMessage(
+          err,
+          locationMode === "address" ? "Couldn't find that address" : "Couldn't save coordinates"
+        )
+      )
+    } finally {
+      setSavingLocation(false)
+    }
+  }
+
   return (
     <div className="max-w-5xl space-y-4">
       <Link
@@ -207,7 +241,90 @@ function SupplierDetail() {
               <Field label="Payment terms" value={supplier.paymentTerms || "—"} />
               <Field label="Contract expiry" value={formatDate(supplier.contractExpiry)} />
               <Field label="Added" value={formatDate(supplier.createdAt)} />
+              <Field
+                label="Precise location"
+                value={
+                  supplier.location
+                    ? `${supplier.location.address || `${supplier.location.lat.toFixed(4)}, ${supplier.location.lng.toFixed(4)}`} (${supplier.location.source === "nominatim" ? "geocoded" : "manual"})`
+                    : "Not set — using country only"
+                }
+              />
             </dl>
+
+            {isAdmin && !editingLocation && (
+              <button
+                type="button"
+                className="mt-3 text-xs text-primary hover:underline"
+                onClick={() => setEditingLocation(true)}
+              >
+                {supplier.location ? "Update precise location" : "Set precise location"}
+              </button>
+            )}
+
+            {isAdmin && editingLocation && (
+              <div className="mt-3 space-y-2 border-t border-border pt-4">
+                <div className="flex gap-3 text-xs">
+                  <button
+                    type="button"
+                    className={locationMode === "address" ? "font-medium text-primary" : "text-muted-foreground"}
+                    onClick={() => setLocationMode("address")}
+                  >
+                    By address
+                  </button>
+                  <button
+                    type="button"
+                    className={locationMode === "manual" ? "font-medium text-primary" : "text-muted-foreground"}
+                    onClick={() => setLocationMode("manual")}
+                  >
+                    By coordinates
+                  </button>
+                </div>
+
+                {locationMode === "address" ? (
+                  <Input
+                    placeholder="e.g. 1600 Amphitheatre Parkway, Mountain View, CA"
+                    value={locationForm.address}
+                    onChange={(e) => setLocationForm((p) => ({ ...p, address: e.target.value }))}
+                  />
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Latitude"
+                      value={locationForm.lat}
+                      onChange={(e) => setLocationForm((p) => ({ ...p, lat: e.target.value }))}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Longitude"
+                      value={locationForm.lng}
+                      onChange={(e) => setLocationForm((p) => ({ ...p, lng: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                {locationError && <p className="text-xs text-red-700">{locationError}</p>}
+
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSaveLocation} disabled={savingLocation}>
+                    {savingLocation ? "Saving…" : "Save"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingLocation(false)
+                      setLocationError("")
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Geocoding via OpenStreetMap Nominatim. Geocoding data © OpenStreetMap contributors.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
