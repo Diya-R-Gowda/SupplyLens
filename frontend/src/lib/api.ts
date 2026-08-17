@@ -5,8 +5,7 @@ const ACCESS_TOKEN_KEY = "accessToken"
 const REFRESH_TOKEN_KEY = "refreshToken"
 const USER_KEY = "user"
 
-// Same fallback as the existing client/ app - Vite dev server default,
-// overridable at build time via VITE_API_BASE_URL.
+// Vite dev server default, overridable at build time via VITE_API_BASE_URL.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000/api"
 
 export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY)
