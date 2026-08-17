@@ -218,6 +218,8 @@ npm test            # Jest + Supertest against a real, ephemeral mongod (mongodb
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the full server test suite and a client build check on every push and PR to `main`.
 
+A separate workflow (`.github/workflows/docker-publish.yml`) builds and publishes both Docker images to GitHub Container Registry on every push of a `v*.*.*` tag - `ghcr.io/<owner>/supplylens-server` and `ghcr.io/<owner>/supplylens-frontend`, each tagged with the release version and `latest`.
+
 ---
 
 # 🧠 MongoDB Vector Search Configuration
@@ -278,8 +280,6 @@ Node Cron automatically performs scheduled tasks:
 See [TODO.md](TODO.md) for the full, honest list of open items and known limitations. Highlights:
 
 - Actual live deployment - `render.yaml` and Docker are ready; going live needs a real Render account/billing decision only you can make
-- Automated Docker image publishing to a registry (CI currently builds/tests only, doesn't push images)
-- RAG chat answer confidence scores (deferred - see TODO.md for why)
 - Per-supplier (rather than country-level) geolocation, if precise mapping is ever needed
 - A true multi-tier dependency graph, if real supplier-to-supplier relationship data is ever captured
 

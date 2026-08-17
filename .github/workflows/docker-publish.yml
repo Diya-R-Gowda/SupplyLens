@@ -1,0 +1,132 @@
+name: Docker Publish
+
+# Publishes on a real release tag, not every push to main - every image in
+# the registry then corresponds to an actual release, not merge noise. Kept
+# as a separate workflow from ci.yml rather than a job triggered off it -
+# this project's CI is already flat/non-clever (see ci.yml), and a tag push
+# is a genuinely different trigger from branch push/PR.
+on:
+  push:
+    tags: ['v*.*.*']
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Lightweight re-check that each image's source actually builds before
+  # publishing anything - duplicated here rather than depending on ci.yml's
+  # run via workflow_run, matching this project's preference for
+  # straightforward, non-cross-workflow CI (see ci.yml's two flat jobs).
+  server-check:
+    name: Server build check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  frontend-check:
+    name: Frontend build check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  publish-server:
+    name: Publish server image
+    needs: server-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR requires lowercase image names - github.repository_owner isn't
+      # guaranteed lowercase (this repo's owner isn't), so compute it once.
+      - name: Lowercase repository owner
+        id: owner
+        run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/supplylens-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: server
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  publish-frontend:
+    name: Publish frontend image
+    needs: frontend-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase repository owner
+        id: owner
+        run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/supplylens-frontend
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      # No VITE_API_BASE_URL build-arg override here - it bakes in at build
+      # time (see frontend/Dockerfile), so this published image keeps the
+      # Dockerfile's own local-dev default. A real deployment that needs a
+      # different backend URL should build from source with its own
+      # --build-arg (e.g. via render.yaml/docker-compose), not pull this tag
+      # expecting it to already point at a specific live server.
+      - uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

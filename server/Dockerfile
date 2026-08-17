@@ -1,5 +1,7 @@
 FROM node:22-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/Diya-R-Gowda/SupplyLens"
+
 WORKDIR /app
 
 # Copy manifest files first so `npm ci` is only re-run when dependencies
