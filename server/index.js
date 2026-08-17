@@ -17,6 +17,15 @@ const snapshotCron = require('./jobs/snapshotCron');
 const alertCron = require('./jobs/alertCron');
 const app = express();
 
+// Render sits exactly one reverse-proxy hop in front of this service - `1`
+// means trust exactly one hop, the correct value for that topology. Without
+// this, express-rate-limit's req.ip derivation (via X-Forwarded-For) is
+// unreliable behind any reverse proxy: either every real user collapses to
+// one IP for rate-limiting, or a spoofed header could be trusted outright.
+// Revisit if a future deployment sits behind a different number of hops
+// (e.g. a CDN in front of Render) - see TODO.md.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors(corsOptions));
 app.use(express.json());
