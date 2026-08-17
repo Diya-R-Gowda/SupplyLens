@@ -1,6 +1,7 @@
 const DocChunk = require('../models/DocChunk');
 const Document = require('../models/Document');
 const { getEmbeddings, generateAnswer } = require('./embedService');
+const { clampToRange } = require('../utils/numberCoercion');
 const mongoose = require('mongoose');
 
 const formatHistory = (history) =>
@@ -76,6 +77,37 @@ exports.retrieveRelevantChunks = async (supplierId, query) => {
   return { chunks: contextChunks, sources: sourceDocs.map((d) => d.fileName) };
 };
 
+// Self-rates an already-generated answer's confidence via a second, short
+// Gemini call - deliberately NOT folded into the main answer prompt above.
+// That prompt is free-text (the chat UI renders natural prose, not a parsed
+// object), and Gemini's JSON mode is more prone to truncating/reformatting
+// longer prose than a plain completion is - asking for a JSON confidence
+// field in the same call risks degrading the answer itself. Never throws:
+// a failure here (bad JSON, API error, timeout) must not take down an
+// otherwise-successful answer, so it resolves to null ("not rated").
+// Exported (not just used internally by answerSupplierQuestion below) so it
+// can be unit-tested in isolation - retrieval/vectorSearch requires a real
+// Atlas cluster (mongodb-memory-server has no $vectorSearch support), so
+// this is the one piece of the RAG pipeline that's actually testable in CI.
+exports.rateAnswerConfidence = async (question, answer) => {
+  try {
+    const prompt = `You are rating the confidence of an answer a contract analyst just gave, based ONLY on how well-supported the answer is by the context it was given (not general world knowledge).
+Respond with ONLY a JSON object, no markdown formatting, no code fences, in exactly this shape:
+{"confidence": <0-1 number - how confident the answer is, e.g. a direct quote or clearly-stated fact should score near 1, an inference or partial match should score lower>}
+
+Question: ${question}
+
+Answer: ${answer}`;
+
+    const raw = await generateAnswer(prompt);
+    const jsonText = raw.replace(/```json|```/gi, '').trim();
+    const parsed = JSON.parse(jsonText);
+    return clampToRange(parsed.confidence, 0, 1);
+  } catch {
+    return null;
+  }
+};
+
 // history is the conversation's prior turns (this question is not in it yet) -
 // used so a follow-up like "why is it that high?" can resolve against what was
 // just discussed, not just the freshly retrieved document chunks.
@@ -85,7 +117,7 @@ exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
   const { chunks: contextChunks, sources } = await exports.retrieveRelevantChunks(supplierId, question);
 
   if (contextChunks.length === 0) {
-    return { answer: "I couldn't find any information in the uploaded documents to answer that.", sources: [] };
+    return { answer: "I couldn't find any information in the uploaded documents to answer that.", sources: [], confidence: null };
   }
 
   // 3. Build the Prompt
@@ -111,5 +143,6 @@ exports.answerSupplierQuestion = async (supplierId, question, history = []) => {
 
   // 4. Get the answer from Gemini
   const answer = await generateAnswer(finalPrompt);
-  return { answer, sources };
+  const confidence = await exports.rateAnswerConfidence(question, answer);
+  return { answer, sources, confidence };
 };

@@ -75,6 +75,7 @@ const askQuestionValidation = [
  *                 answer: The payment terms are Net 30 per section 4.2 of the agreement.
  *                 conversationId: 6a6cf137f857b1ef1c7004a2
  *                 sources: [msa-2026.pdf]
+ *                 confidence: 0.85
  *       400:
  *         description: question missing from the request body
  *         content:
@@ -157,13 +158,13 @@ router.post('/:supplierId', auth, validate(askQuestionValidation), asyncHandler(
   // No catch-and-fake-answer here: if the RAG pipeline fails (Gemini API
   // error, missing embeddings, etc.) that must surface as a real error, not a
   // 200 with a made-up "answer unavailable" message.
-  const { answer, sources } = await answerSupplierQuestion(supplierId, question, priorMessages);
+  const { answer, sources, confidence } = await answerSupplierQuestion(supplierId, question, priorMessages);
 
   conversation.messages.push({ role: 'user', content: question, timestamp: new Date() });
-  conversation.messages.push({ role: 'assistant', content: answer, timestamp: new Date(), sources });
+  conversation.messages.push({ role: 'assistant', content: answer, timestamp: new Date(), sources, confidence });
   await conversation.save();
 
-  return sendSuccess(res, { answer, conversationId: conversation._id, sources });
+  return sendSuccess(res, { answer, conversationId: conversation._id, sources, confidence });
 }));
 
 module.exports = router;

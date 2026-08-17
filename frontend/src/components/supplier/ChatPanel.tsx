@@ -12,6 +12,7 @@ import {
 import { askQuestion, listConversations } from "@/lib/chat"
 import { getErrorMessage } from "@/lib/errors"
 import type { ChatMessage, Conversation, DocumentRecord } from "@/lib/types"
+import ConfidenceBadge from "@/components/badges/ConfidenceBadge"
 
 function conversationLabel(conversation: Conversation) {
   const firstQuestion =
@@ -30,7 +31,7 @@ function SourceChips({
   documents: DocumentRecord[]
 }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5">
       {sources.map((fileName) => {
         const doc = documents.find((d) => d.fileName === fileName)
         const chip = (
@@ -124,6 +125,7 @@ function ChatPanel({
           content: result.answer,
           timestamp: new Date().toISOString(),
           sources: result.sources,
+          confidence: result.confidence,
         },
       ])
       const isNewConversation = !conversationId
@@ -194,8 +196,13 @@ function ChatPanel({
               }`}
             >
               <p className="whitespace-pre-wrap">{message.content}</p>
-              {message.sources && message.sources.length > 0 && (
-                <SourceChips sources={message.sources} documents={documents} />
+              {message.role === "assistant" && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <ConfidenceBadge confidence={message.confidence} />
+                  {message.sources && message.sources.length > 0 && (
+                    <SourceChips sources={message.sources} documents={documents} />
+                  )}
+                </div>
               )}
             </div>
           </div>

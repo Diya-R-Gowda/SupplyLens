@@ -7,6 +7,11 @@ const messageSchema = new mongoose.Schema({
   // Only ever set on assistant messages - the distinct source document
   // filenames the answer was actually grounded in.
   sources: [String],
+  // Only ever set on assistant messages - the model's own self-rated
+  // confidence in the answer it just gave (see ragService.rateAnswerConfidence).
+  // Absent/null means "not rated" (e.g. the self-rating call itself failed),
+  // not "zero confidence" - same convention as Supplier.enrichment.confidence.
+  confidence: { type: Number, min: 0, max: 1 },
 }, { _id: false });
 
 const conversationSchema = new mongoose.Schema({

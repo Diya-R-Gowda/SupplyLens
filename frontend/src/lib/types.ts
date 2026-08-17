@@ -85,6 +85,9 @@ export interface ChatMessage {
   // Source filenames only (server never returns a doc id here) - matched
   // back against the loaded document list by filename to link a chip.
   sources?: string[]
+  // Only ever set on assistant messages. null/undefined means "not rated"
+  // (e.g. the model's self-rating call failed), not "zero confidence".
+  confidence?: number | null
 }
 
 export interface Conversation {
@@ -99,6 +102,7 @@ export interface AskResponse {
   answer: string
   conversationId: string
   sources: string[]
+  confidence?: number | null
 }
 
 // --- News ---
