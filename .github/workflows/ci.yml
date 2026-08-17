@@ -48,6 +48,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run test suite
+        # Vitest + React Testing Library. Fails fast on tests before
+        # spending time on a full typecheck+build.
+        run: npm test
+
       - name: Build
         # tsc -b && vite build - the typecheck is folded into this script
         # itself (frontend/package.json), not a separate step.
