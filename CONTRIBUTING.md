@@ -835,10 +835,10 @@ cd SupplyLens
 
 ## Install Dependencies
 
-### Client
+### Frontend
 
 ```bash
-cd client
+cd frontend
 npm install
 ```
 
@@ -894,9 +894,12 @@ npm run dev
 ```
 SupplyLens/
 
-client/
+frontend/
 │
 ├── src/
+│   ├── components/
+│   ├── lib/
+│   └── pages/
 ├── public/
 └── package.json
 

@@ -14,8 +14,8 @@ mode** (in-memory canned data, no crash); with `GEMINI_API_KEY`/`CURRENTS_API_KE
 specific features that need them fail gracefully rather than blocking anything else.
 
 ```
-client/  React 19 + Vite, Tailwind, no react-router (single-page state-swap navigation)
-server/  Express 5 + Mongoose 9, CommonJS
+frontend/  React 19 + Vite + TypeScript, Tailwind v4, shadcn/ui, react-router-dom
+server/    Express 5 + Mongoose 9, CommonJS
 ```
 
 ## Server layout
@@ -26,17 +26,28 @@ server/  Express 5 + Mongoose 9, CommonJS
 | `services/` | 40 files. Business logic lives here, not in routes — routes stay thin (auth/validation/org-scoping, then delegate). Includes the scoring engine, forecasting, simulation, similarity/recommendation, every Gemini-calling service, and Phase 10's `auditLogService`. |
 | `models/` | 14 Mongoose models. `Supplier` is the core entity; `RiskHistory`/`HealthHistory` log **score changes**; `AuditLog` (Phase 10) logs **user actions** — deliberately separate collections, see below. |
 | `middleware/` | `auth` (JWT), `requireRole` (RBAC gate), `validate` (express-validator wrapper), `errorHandler` (centralized, single response shape), `rateLimit` and the CORS config in `config/corsOptions.js` (Phase 10). |
-| `jobs/` | Two node-cron jobs: `newsCron` (6-hourly) and `snapshotCron` (daily), each with a boot-time catch-up check against `CronRunLog` so a missed slot (deploy, crash, sleeping dev machine) doesn't silently starve the schedule. |
+| `jobs/` | Three node-cron jobs: `newsCron` (6-hourly), `snapshotCron` (daily), and `alertCron` (15-minutely — checks risk/health threshold breaches and emails opted-in users via `notificationService`). Each has a boot-time catch-up check against `CronRunLog` so a missed slot (deploy, crash, sleeping dev machine) doesn't silently starve the schedule. |
 | `config/` | `db.js` (Mongo connection + demo-mode fallback), `swagger.js` (OpenAPI spec, tag-organized by phase), `logger.js` (pino, Phase 10), `corsOptions.js` (Phase 10). |
 | `data/` | Two static JSON lookup tables, no external API: `countryRisk.json` (risk-scoring input) and `countryCentroids.json` (Phase 9 map/heatmap — capital-city coordinates per ISO country code). |
 
-## Client layout
+## Frontend layout
 
-`client/src/pages/Dashboard.jsx` is the real entry point after login — there's no react-router;
-navigation is boolean/string local state swapping between full "page" components (`components/`
-has 32 of them, including every Phase 6–9 visualization/panel). `App.jsx` and `main.jsx` are thin
-bootstrapping. `api/axios.js` holds the one shared HTTP client, including access-token refresh
-handling.
+`frontend/` is the current, canonical frontend (the earlier `client/` app it replaced had no
+router and no TypeScript). `App.tsx` defines real `react-router-dom` routes: `/`, `/login`, and
+`/dashboard/*` behind `ProtectedRoute`. `/dashboard` is a layout route (`DashboardLayout`) whose
+sidebar/topbar shell persists across navigation rather than remounting — `AnimatePresence`'s page
+transition is keyed on the top-level path *section* (e.g. `/dashboard` for every dashboard
+sub-route), not the raw pathname, so only landing↔login↔dashboard transitions actually fade.
+`/dashboard/analytics/*` is itself a nested layout route (`AnalyticsLayout`) wrapping the four
+visualization tab pages (concentration graph, geographic map, timeline, heatmap).
+
+- `lib/` — `api.ts` (the one shared axios instance, including access-token refresh handling),
+  `auth.tsx` (`AuthProvider`/`useAuth`), and one module per feature area (`suppliers.ts`,
+  `documents.ts`, `chat.ts`, `twin.ts`, `forecast.ts`, `scenario.ts`, `agents.ts`,
+  `visualizations.ts`, `org.ts`, etc.) plus `types.ts` for the corresponding response shapes.
+- `components/` — organized by area (`dashboard/`, `supplier/`, `badges/`, `landing/`, `ui/` for
+  shadcn primitives), not a flat directory.
+- `pages/` — one file per top-level route, plus `pages/analytics/` for the four visualization tabs.
 
 ## The org-scoping / 404-vs-403 convention
 
@@ -102,8 +113,8 @@ real versus what's a foundation for more work:
 - **Testing**: critical-path coverage (auth, RBAC, org-scoping, core scoring/forecast math) via a
   real Jest + Supertest + mongodb-memory-server suite — not comprehensive coverage of all 9 prior
   phases' features. See TODO.md.
-- **CI**: GitHub Actions runs the real test suite and a real client build check on every push/PR to
-  `main` — confirmed by actually watching it pass, not just written and assumed correct.
+- **CI**: GitHub Actions runs the real test suite and a real frontend build check on every push/PR
+  to `main` — confirmed by actually watching it pass, not just written and assumed correct.
 - **Docker**: real Dockerfiles + docker-compose, built and run locally, with a real end-to-end
   check through the actual containers (not just "the files exist").
 - **Security**: helmet, rate limiting (general + a tighter auth-specific limit), CORS scoped to a

@@ -135,12 +135,12 @@ News API + Sentiment Analysis
 ```
 SupplyLens/
 │
-├── client/
+├── frontend/
 │   ├── src/
-│   │   ├── api/
-│   │   ├── components/     # visualization pages, panels, charts, shared UI
-│   │   ├── pages/
-│   │   └── App.jsx
+│   │   ├── components/      # dashboard shell, supplier panels, badges, landing, shadcn ui/
+│   │   ├── lib/              # api client, auth, per-feature service modules, types
+│   │   ├── pages/             # top-level routes + pages/analytics/ sub-routes
+│   │   └── App.tsx
 │   └── package.json
 │
 ├── server/
@@ -192,9 +192,9 @@ See `.env.example` for the full list (`MONGO_URI`, `JWT_SECRET`, `GEMINI_API_KEY
 docker compose up --build
 ```
 
-This starts MongoDB, the API server (`:5000`), and the built client (`:8080`) together.
+This starts MongoDB, the API server (`:5000`), and the built frontend (`:8080`) together.
 
-## 4. Or Run Locally (server + client separately)
+## 4. Or Run Locally (server + frontend separately)
 
 ```bash
 cd server
@@ -202,7 +202,7 @@ npm install
 npm run dev        # nodemon, http://localhost:5000
 
 # in another terminal
-cd client
+cd frontend
 npm install
 npm run dev         # Vite dev server, http://localhost:5173
 ```
@@ -216,7 +216,7 @@ cd server
 npm test            # Jest + Supertest against a real, ephemeral mongod (mongodb-memory-server)
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs the full server test suite and a client build check on every push and PR to `main`.
+GitHub Actions (`.github/workflows/ci.yml`) runs the full server test suite and a frontend build check on every push and PR to `main`.
 
 A separate workflow (`.github/workflows/docker-publish.yml`) builds and publishes both Docker images to GitHub Container Registry on every push of a `v*.*.*` tag - `ghcr.io/<owner>/supplylens-server` and `ghcr.io/<owner>/supplylens-frontend`, each tagged with the release version and `latest`.
 
