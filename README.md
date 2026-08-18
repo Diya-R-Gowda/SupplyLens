@@ -268,7 +268,7 @@ Node Cron automatically performs scheduled tasks:
 
 - JWT authentication with rotating refresh tokens
 - Password hashing with Bcrypt
-- Role-based access control (`admin` / `viewer`) enforced on every mutating route
+- Role-based access control (`admin` / `viewer`) enforced on every mutating route, including admin-managed team membership (`POST /org/invite-user` to add a member, `PATCH /org/users/:userId/role` to promote/demote an existing one)
 - Org-scoped data access enforced on every route (verified with cross-org isolation tests)
 - Security headers via Helmet, rate limiting via express-rate-limit
 - Audit logs for sensitive admin actions
@@ -282,6 +282,7 @@ See [TODO.md](TODO.md) for the full, honest list of open items and known limitat
 - Actual live deployment - `render.yaml` and Docker are ready; going live needs a real Render account/billing decision only you can make
 - A true multi-tier dependency graph, if real supplier-to-supplier relationship data is ever captured
 - Alert-breach notifications are email-only for now; SMS is a real but unbuilt v2 candidate
+- Team invites and role changes are admin-direct-action only — no self-service email invite/accept flow yet
 
 ---
 

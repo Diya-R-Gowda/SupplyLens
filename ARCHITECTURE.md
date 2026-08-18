@@ -22,7 +22,7 @@ server/    Express 5 + Mongoose 9, CommonJS
 
 | Directory | What's actually in it |
 |---|---|
-| `routes/` | 9 route files: `auth`, `suppliers` (the largest — CRUD plus every per-supplier feature: enrichment, ESG/logistics, twin, timeline, forecast, scenario simulator, agents), `dashboard`, `documents`, `news`, `rag`, `orgConfig`, `orgAnalytics` (org-wide/portfolio endpoints — forecast, timeline, map, heatmap, concentration graph, audit logs), `health` (Phase 10). |
+| `routes/` | 9 route files: `auth`, `suppliers` (the largest — CRUD plus every per-supplier feature: enrichment, ESG/logistics, twin, timeline, forecast, scenario simulator, agents, geolocation), `dashboard`, `documents`, `news`, `rag`, `orgConfig` (risk-config, admin-managed team membership — invite a member, list members, promote/demote an existing one), `orgAnalytics` (org-wide/portfolio endpoints — forecast, timeline, map, heatmap, concentration graph, audit logs), `health` (Phase 10). |
 | `services/` | 40 files. Business logic lives here, not in routes — routes stay thin (auth/validation/org-scoping, then delegate). Includes the scoring engine, forecasting, simulation, similarity/recommendation, every Gemini-calling service, and Phase 10's `auditLogService`. |
 | `models/` | 14 Mongoose models. `Supplier` is the core entity; `RiskHistory`/`HealthHistory` log **score changes**; `AuditLog` (Phase 10) logs **user actions** — deliberately separate collections, see below. |
 | `middleware/` | `auth` (JWT), `requireRole` (RBAC gate), `validate` (express-validator wrapper), `errorHandler` (centralized, single response shape), `rateLimit` and the CORS config in `config/corsOptions.js` (Phase 10). |
@@ -112,7 +112,9 @@ real versus what's a foundation for more work:
 
 - **Testing**: critical-path coverage (auth, RBAC, org-scoping, core scoring/forecast math) via a
   real Jest + Supertest + mongodb-memory-server suite — not comprehensive coverage of all 9 prior
-  phases' features. See TODO.md.
+  phases' features. Grown substantially post-launch (179 tests, 17 files as of this update) and
+  joined by `frontend/`'s first-ever automated suite (Vitest + React Testing Library, 96 tests,
+  12 files) — see TODO.md for exactly what's covered vs. still deliberately deferred in both.
 - **CI**: GitHub Actions runs the real test suite and a real frontend build check on every push/PR
   to `main` — confirmed by actually watching it pass, not just written and assumed correct.
 - **Docker**: real Dockerfiles + docker-compose, built and run locally, with a real end-to-end
