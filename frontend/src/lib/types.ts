@@ -653,6 +653,12 @@ export interface InvitedUser {
   orgId: string
 }
 
+export interface OrgUser {
+  _id: string
+  email: string
+  role: Role
+}
+
 export interface AuditLogEntry {
   _id: string
   action: string
