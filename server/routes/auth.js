@@ -132,7 +132,11 @@ router.post('/register', authLimiter, validate(registerValidation), asyncHandler
 			throw new ApiError('An account with this email already exists', 409, 'EMAIL_TAKEN');
 		}
 
-		const org = await Organisation.create({ name: `${email.split('@')[0]}'s Organisation` });
+		// adminCount: 1 explicitly, not just relying on the schema default -
+		// this is the one place a brand-new org's single admin (the caller,
+		// created below) is known for certain, so it's worth stating outright
+		// rather than depending on a default staying in sync with that fact.
+		const org = await Organisation.create({ name: `${email.split('@')[0]}'s Organisation`, adminCount: 1 });
 		const hashedPassword = await bcrypt.hash(password, 10);
 		const user = await User.create({
 			email,
