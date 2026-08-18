@@ -1,11 +1,17 @@
 import { describe, test, expect, beforeEach } from "vitest"
-import { render, screen, waitFor, fireEvent } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import MockAdapter from "axios-mock-adapter"
 import api from "@/lib/api"
 import { AuthProvider } from "@/lib/auth"
 import Settings from "./Settings"
 
 const apiMock = new MockAdapter(api)
+
+const ORG_USERS = [
+  { _id: "u1", email: "admin@example.com", role: "admin" },
+  { _id: "u2", email: "viewer@example.com", role: "viewer" },
+]
 
 const VALID_RISK_CONFIG = {
   riskWeights: { newsScore: 0.4, expiryScore: 0.3, docScore: 0.2, countryScore: 0.1 },
@@ -45,6 +51,7 @@ beforeEach(() => {
   apiMock.onGet("/org/audit-logs").reply(200, {
     data: { logs: [], total: 0, page: 1, limit: 20, totalPages: 1 },
   })
+  apiMock.onGet("/org/users").reply(200, { data: ORG_USERS })
 })
 
 describe("Settings > risk config weight-sum validation", () => {
@@ -100,5 +107,62 @@ describe("Settings > risk config weight-sum validation", () => {
     const totals = screen.getAllByText(/Total: \d+%/)
     expect(totals.some((el) => /Total: 100%/.test(el.textContent ?? ""))).toBe(true)
     expect(totals.some((el) => /Total: 125%/.test(el.textContent ?? ""))).toBe(true)
+  })
+})
+
+// The page also renders InviteUserSection's own role <Select>, which shares
+// the "combobox" role - scope every query to the Team members panel so it
+// doesn't collide with that unrelated picker.
+function teamMembersSection() {
+  return screen.getByRole("heading", { name: "Team members" }).closest(".rounded-xl") as HTMLElement
+}
+
+describe("Settings > team members role management", () => {
+  test("lists org members, marks the caller's own row, and locks it from editing", async () => {
+    renderAsAdmin()
+
+    await waitFor(() => expect(screen.getByText("admin@example.com")).toBeInTheDocument())
+    expect(screen.getByText("viewer@example.com")).toBeInTheDocument()
+
+    const section = teamMembersSection()
+    // Self row: shows "(you)" and a plain-text role, no editable control.
+    expect(within(section).getByText("(you)")).toBeInTheDocument()
+    expect(within(section).getAllByRole("combobox")).toHaveLength(1) // only the other member's role picker
+
+    // Other member's row has an editable role picker showing their current role.
+    expect(within(section).getByRole("combobox")).toHaveTextContent(/viewer/i)
+  })
+
+  test("promoting another member to admin calls the role endpoint and updates the row", async () => {
+    apiMock.onPatch("/org/users/u2/role").reply(200, {
+      data: { _id: "u2", email: "viewer@example.com", role: "admin" },
+    })
+    renderAsAdmin()
+    await waitFor(() => expect(screen.getByText("viewer@example.com")).toBeInTheDocument())
+
+    const user = userEvent.setup()
+    const section = teamMembersSection()
+    await user.click(within(section).getByRole("combobox"))
+    await user.click(await screen.findByRole("option", { name: /admin/i }))
+
+    await waitFor(() => expect(within(section).getByRole("combobox")).toHaveTextContent(/admin/i))
+    expect(JSON.parse(apiMock.history.patch[0].data)).toEqual({ role: "admin" })
+  })
+
+  test("a rejected role change (e.g. last-admin) shows an inline row error", async () => {
+    apiMock.onPatch("/org/users/u2/role").reply(400, {
+      error: { message: "Cannot remove the last admin from the organisation", code: "LAST_ADMIN" },
+    })
+    renderAsAdmin()
+    await waitFor(() => expect(screen.getByText("viewer@example.com")).toBeInTheDocument())
+
+    const user = userEvent.setup()
+    const section = teamMembersSection()
+    await user.click(within(section).getByRole("combobox"))
+    await user.click(await screen.findByRole("option", { name: /admin/i }))
+
+    await waitFor(() =>
+      expect(within(section).getByText("Cannot remove the last admin from the organisation")).toBeInTheDocument()
+    )
   })
 })
