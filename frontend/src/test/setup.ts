@@ -13,3 +13,20 @@ import { cleanup } from "@testing-library/react"
 afterEach(() => {
   cleanup()
 })
+
+// Radix's <Select> (used by shadcn/ui's Select, e.g. Settings.tsx's role
+// pickers) calls scrollIntoView and the Pointer Capture APIs, none of which
+// jsdom implements - no-op polyfills so opening/interacting with a <Select>
+// in a test doesn't throw.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {}
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {}
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
