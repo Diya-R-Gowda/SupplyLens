@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { ShieldCheck, UserPlus, ScrollText } from "lucide-react"
+import { ShieldCheck, UserPlus, ScrollText, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -13,10 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import ErrorState from "@/components/ErrorState"
 import { useAuth } from "@/lib/auth"
 import { getRiskConfig, updateRiskConfig } from "@/lib/riskConfig"
-import { inviteUser, listAuditLogs } from "@/lib/org"
+import { inviteUser, listAuditLogs, listOrgUsers, updateUserRole } from "@/lib/org"
 import { getErrorMessage } from "@/lib/errors"
 import { formatDate } from "@/lib/format"
-import type { AuditLogEntry, HealthWeights, Pagination, Role, RiskConfig, RiskWeights } from "@/lib/types"
+import type { AuditLogEntry, HealthWeights, OrgUser, Pagination, Role, RiskConfig, RiskWeights } from "@/lib/types"
 
 const RISK_LABELS: Record<keyof RiskWeights, string> = {
   newsScore: "News sentiment",
@@ -314,6 +314,91 @@ function InviteUserSection() {
   )
 }
 
+function TeamMembersSection() {
+  const { user } = useAuth()
+  const [members, setMembers] = useState<OrgUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError("")
+    try {
+      setMembers(await listOrgUsers())
+    } catch (err) {
+      setError(getErrorMessage(err, "Couldn't load team members"))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleRoleChange = async (member: OrgUser, role: Role) => {
+    setSavingId(member._id)
+    setRowErrors((e) => ({ ...e, [member._id]: "" }))
+    try {
+      const updated = await updateUserRole(member._id, role)
+      setMembers((list) => list.map((m) => (m._id === updated._id ? updated : m)))
+    } catch (err) {
+      setRowErrors((e) => ({ ...e, [member._id]: getErrorMessage(err, "Couldn't update role") }))
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  if (loading) return <Skeleton className="h-40 rounded-xl" />
+  if (error) return <ErrorState message={error} onRetry={load} />
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Users className="size-4 text-primary" />
+        <h2 className="text-sm font-medium">Team members</h2>
+      </div>
+      <ul className="space-y-1.5">
+        {members.map((member) => {
+          const isSelf = member.email === user?.email
+          return (
+            <li key={member._id} className="rounded-lg border border-border px-3 py-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {member.email}
+                  {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
+                </span>
+                {isSelf ? (
+                  <span className="text-xs capitalize text-muted-foreground">{member.role}</span>
+                ) : (
+                  <Select
+                    value={member.role}
+                    onValueChange={(v) => handleRoleChange(member, v as Role)}
+                    disabled={savingId === member._id}
+                  >
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {rowErrors[member._id] && (
+                <p className="mt-1 text-xs text-red-700">{rowErrors[member._id]}</p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 function AuditLogSection() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [pagination, setPagination] = useState<Pagination | null>(null)
@@ -423,6 +508,7 @@ function Settings() {
       {isAdmin ? (
         <>
           <InviteUserSection />
+          <TeamMembersSection />
           <AuditLogSection />
         </>
       ) : (
