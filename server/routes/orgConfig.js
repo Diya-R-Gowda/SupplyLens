@@ -12,6 +12,8 @@ const { sendSuccess } = require('../utils/response');
 const RiskConfig = require('../models/RiskConfig');
 const User = require('../models/User');
 const Organisation = require('../models/Organisation');
+const Conversation = require('../models/Conversation');
+const RefreshToken = require('../models/RefreshToken');
 const {
   getOrgConfig,
   upsertOrgConfig,
@@ -468,6 +470,120 @@ router.patch('/users/:userId/role', auth, requireRole('admin'), validate(updateR
   });
 
   return sendSuccess(res, { _id: String(updatedUser._id), email: updatedUser.email, role: updatedUser.role });
+}));
+
+/**
+ * @swagger
+ * /org/users/{userId}:
+ *   delete:
+ *     summary: Remove a member from the caller's org (admin only)
+ *     description: >
+ *       Closes the gap flagged during the role-management work: Organisation.adminCount must
+ *       decrement when an admin is deleted, and no deletion endpoint existed to do that before
+ *       this. Reuses the exact same guards as PATCH .../role - org-scoped lookup (404, not 403,
+ *       for a userId outside the caller's org), a self-delete rejection (400 SELF_DELETE - ask
+ *       another admin instead), and the same atomic, session-guarded Organisation.adminCount
+ *       decrement (400 LAST_ADMIN) if the target is an admin - all inside one transaction so the
+ *       count and the deletion can never drift apart if either write fails. Also cleans up the
+ *       departing user's own Conversation history and RefreshTokens (both required refs to User,
+ *       and neither should outlive the account), and clears Organisation.owner if the deleted
+ *       user held it (owner is informational only - RBAC is purely role-based - so this is a safe
+ *       default, not a design risk). AuditLog rows are deliberately left alone: the frontend
+ *       already renders a missing/deleted actor as "unknown user", so the audit trail correctly
+ *       survives past the actor's own deletion. Not available in demo mode.
+ *     tags: [Config]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessEnvelope'
+ *       400:
+ *         description: Self-delete, last-admin rejection, or unavailable in demo mode
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       403:
+ *         description: Caller is not an org admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ *       404:
+ *         description: No user with that ID in the caller's org
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorEnvelope'
+ */
+router.delete('/users/:userId', auth, requireRole('admin'), asyncHandler(async (req, res) => {
+  if (isDemoMode()) {
+    throw new ApiError('Deleting users is not available in demo mode', 400, 'DEMO_MODE_UNSUPPORTED');
+  }
+
+  const { userId } = req.params;
+
+  const session = await mongoose.startSession();
+  let deletedUser;
+
+  try {
+    await session.withTransaction(async () => {
+      const targetUser = await User.findOne({ _id: userId, orgId: req.user.orgId }).session(session);
+      if (!targetUser) {
+        throw new ApiError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      if (String(targetUser._id) === String(req.user.id)) {
+        throw new ApiError('You cannot delete your own account', 400, 'SELF_DELETE');
+      }
+
+      if (targetUser.role === 'admin') {
+        // Same atomic, guarded compare-and-swap proven against the exact
+        // same race in PATCH .../role above - see that route's comment for
+        // why a bare transaction alone isn't enough.
+        const org = await Organisation.findOneAndUpdate(
+          { _id: req.user.orgId, adminCount: { $gt: 1 } },
+          { $inc: { adminCount: -1 } },
+          { session },
+        );
+        if (!org) {
+          throw new ApiError('Cannot remove the last admin from the organisation', 400, 'LAST_ADMIN');
+        }
+      }
+
+      await Conversation.deleteMany({ userId: targetUser._id }).session(session);
+      await RefreshToken.deleteMany({ user: targetUser._id }).session(session);
+      await Organisation.updateOne(
+        { _id: req.user.orgId, owner: targetUser._id },
+        { $unset: { owner: 1 } },
+        { session },
+      );
+      await User.deleteOne({ _id: targetUser._id }).session(session);
+
+      deletedUser = targetUser;
+    }, { readConcern: 'snapshot', writeConcern: { w: 'majority' } });
+  } finally {
+    await session.endSession();
+  }
+
+  await recordAuditLog({
+    orgId: req.user.orgId,
+    userId: req.user.id,
+    action: 'user.deleted',
+    targetType: 'User',
+    targetId: deletedUser._id,
+    detail: { email: deletedUser.email, role: deletedUser.role },
+  });
+
+  return sendSuccess(res, { _id: String(deletedUser._id), email: deletedUser.email });
 }));
 
 module.exports = router;
