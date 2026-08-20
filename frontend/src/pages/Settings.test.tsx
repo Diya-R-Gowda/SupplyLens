@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "vitest"
+import { describe, test, expect, beforeEach, vi } from "vitest"
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import MockAdapter from "axios-mock-adapter"
@@ -164,5 +164,55 @@ describe("Settings > team members role management", () => {
     await waitFor(() =>
       expect(within(section).getByText("Cannot remove the last admin from the organisation")).toBeInTheDocument()
     )
+  })
+
+  test("removing another member asks for confirmation, calls the delete endpoint, and drops the row", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
+    apiMock.onDelete("/org/users/u2").reply(200, { data: { _id: "u2", email: "viewer@example.com" } })
+    renderAsAdmin()
+    await waitFor(() => expect(screen.getByText("viewer@example.com")).toBeInTheDocument())
+
+    const user = userEvent.setup()
+    const section = teamMembersSection()
+    await user.click(within(section).getByRole("button", { name: /remove viewer@example.com/i }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText("viewer@example.com")).not.toBeInTheDocument())
+    confirmSpy.mockRestore()
+  })
+
+  test("declining the confirmation dialog does not call the delete endpoint", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false)
+    apiMock.onDelete("/org/users/u2").reply(200, { data: { _id: "u2", email: "viewer@example.com" } })
+    renderAsAdmin()
+    await waitFor(() => expect(screen.getByText("viewer@example.com")).toBeInTheDocument())
+
+    const user = userEvent.setup()
+    const section = teamMembersSection()
+    await user.click(within(section).getByRole("button", { name: /remove viewer@example.com/i }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(apiMock.history.delete ?? []).toHaveLength(0)
+    expect(screen.getByText("viewer@example.com")).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  test("a rejected deletion (e.g. last-admin) shows an inline row error and keeps the row", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
+    apiMock.onDelete("/org/users/u2").reply(400, {
+      error: { message: "Cannot remove the last admin from the organisation", code: "LAST_ADMIN" },
+    })
+    renderAsAdmin()
+    await waitFor(() => expect(screen.getByText("viewer@example.com")).toBeInTheDocument())
+
+    const user = userEvent.setup()
+    const section = teamMembersSection()
+    await user.click(within(section).getByRole("button", { name: /remove viewer@example.com/i }))
+
+    await waitFor(() =>
+      expect(within(section).getByText("Cannot remove the last admin from the organisation")).toBeInTheDocument()
+    )
+    expect(screen.getByText("viewer@example.com")).toBeInTheDocument()
+    confirmSpy.mockRestore()
   })
 })
