@@ -561,6 +561,17 @@ router.delete('/users/:userId', auth, requireRole('admin'), asyncHandler(async (
 
       await Conversation.deleteMany({ userId: targetUser._id }).session(session);
       await RefreshToken.deleteMany({ user: targetUser._id }).session(session);
+      // Safe to silently drop, not reassign, today: `owner` is informational
+      // only, nothing anywhere reads it to authorize anything (RBAC is
+      // purely role-based via requireRole - confirmed, not assumed). If a
+      // future feature ever gives `owner` real authorization meaning (e.g.
+      // an owner-only action distinct from plain 'admin'), this needs
+      // revisiting - a bare $unset with no reassignment and no audit-log
+      // entry of its own would then be silently dropping a real permission,
+      // not just clearing a label. Same category of risk as adminCount
+      // drifting stale (see that field's comment in models/Organisation.js
+      // and TODO.md) - a derived/secondary field whose current harmlessness
+      // depends on nothing else in the app depending on it yet.
       await Organisation.updateOne(
         { _id: req.user.orgId, owner: targetUser._id },
         { $unset: { owner: 1 } },
