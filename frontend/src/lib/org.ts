@@ -16,6 +16,10 @@ export async function updateUserRole(userId: string, role: Role): Promise<OrgUse
   return data.data as OrgUser
 }
 
+export async function deleteOrgUser(userId: string): Promise<void> {
+  await api.delete(`/org/users/${userId}`)
+}
+
 export async function listAuditLogs(
   params: { page?: number; limit?: number } = {}
 ): Promise<AuditLogsPage> {
