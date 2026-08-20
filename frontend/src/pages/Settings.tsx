@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { ShieldCheck, UserPlus, ScrollText, Users } from "lucide-react"
+import { ShieldCheck, UserPlus, ScrollText, Users, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import ErrorState from "@/components/ErrorState"
 import { useAuth } from "@/lib/auth"
 import { getRiskConfig, updateRiskConfig } from "@/lib/riskConfig"
-import { inviteUser, listAuditLogs, listOrgUsers, updateUserRole } from "@/lib/org"
+import { deleteOrgUser, inviteUser, listAuditLogs, listOrgUsers, updateUserRole } from "@/lib/org"
 import { getErrorMessage } from "@/lib/errors"
 import { formatDate } from "@/lib/format"
 import type { AuditLogEntry, HealthWeights, OrgUser, Pagination, Role, RiskConfig, RiskWeights } from "@/lib/types"
@@ -320,6 +320,7 @@ function TeamMembersSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
@@ -351,6 +352,20 @@ function TeamMembersSection() {
     }
   }
 
+  const handleDelete = async (member: OrgUser) => {
+    if (!window.confirm(`Remove ${member.email} from this organisation? This can't be undone.`)) return
+    setDeletingId(member._id)
+    setRowErrors((e) => ({ ...e, [member._id]: "" }))
+    try {
+      await deleteOrgUser(member._id)
+      setMembers((list) => list.filter((m) => m._id !== member._id))
+    } catch (err) {
+      setRowErrors((e) => ({ ...e, [member._id]: getErrorMessage(err, "Couldn't remove member") }))
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (loading) return <Skeleton className="h-40 rounded-xl" />
   if (error) return <ErrorState message={error} onRetry={load} />
 
@@ -373,19 +388,31 @@ function TeamMembersSection() {
                 {isSelf ? (
                   <span className="text-xs capitalize text-muted-foreground">{member.role}</span>
                 ) : (
-                  <Select
-                    value={member.role}
-                    onValueChange={(v) => handleRoleChange(member, v as Role)}
-                    disabled={savingId === member._id}
-                  >
-                    <SelectTrigger className="w-28">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="viewer">Viewer</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={member.role}
+                      onValueChange={(v) => handleRoleChange(member, v as Role)}
+                      disabled={savingId === member._id || deletingId === member._id}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={savingId === member._id || deletingId === member._id}
+                      onClick={() => handleDelete(member)}
+                      aria-label={`Remove ${member.email}`}
+                    >
+                      <Trash2 className="size-4 text-red-700" />
+                    </Button>
+                  </div>
                 )}
               </div>
               {rowErrors[member._id] && (
