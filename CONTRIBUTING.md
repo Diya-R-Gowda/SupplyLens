@@ -785,6 +785,33 @@ Full pass/fail verification of all of the above is above; every scope decision, 
 
 ---
 
+# Post-Launch Work (New since v1.0.0)
+
+Phase 10 declared the original 10-phase roadmap complete and the app "Enterprise Release" (2026-08-10). Real feature work has continued past that point - this section is the running record of what shipped afterward, in the same before/why/how style as the phases above, but without a full numbered smoke-test appendix per item (see `TODO.md`'s "New since v1.0.0" entries, threaded through its own sections, for the decision-level rationale behind each one).
+
+| Item | Notes |
+|------|-------|
+| RAG chat-answer confidence scores | A second, short Gemini call after the main answer (`ragService.js`'s `rateAnswerConfidence`), never folded into the same structured call as the free-text answer - see `TODO.md` §2. |
+| Precise per-supplier geolocation | Nominatim (OpenStreetMap), keyless, rate-limited to 1 req/sec with a required `User-Agent`; a supplier's `location` is either geocoded (`source: 'nominatim'`) or entered manually (`source: 'manual'`), never blended - see `TODO.md` §2. |
+| Docker image publishing | `.github/workflows/docker-publish.yml` publishes both images to GHCR on `v*.*.*` tag push only, gated behind a real build/test check on the source first - see `TODO.md` §3. |
+| Alert-breach email notifications | Nodemailer/SMTP, opt-in via `User.notifyOnAlert` (default `false`), deduplicated per-breach via `AlertNotificationLog` - see `TODO.md` §2. |
+| Role management (list/promote/demote) | `GET /org/users`, `PATCH /org/users/:userId/role` - admin-direct-action, not a token/email invite flow; introduced `Organisation.adminCount` as a real atomic counter after a genuine MongoDB write-skew concurrency bug was found and fixed in the last-admin guard - see `TODO.md` §2 for the full writeup. |
+| **User deletion** (this update) | `DELETE /org/users/:userId` - closes the gap the role-management entry above had flagged as a forward-looking risk. Technical summary below. |
+
+## User Deletion — Technical Summary
+
+**Starting point:** the role-management work above had left an explicit, written warning in `TODO.md` that no `DELETE /users/...` endpoint existed, and that whenever one got built it had to decrement `Organisation.adminCount` correctly or reintroduce the exact concurrency bug that atomic counter was built to close. This update closes that gap directly, not as an afterthought.
+
+- **Route** - `DELETE /org/users/:userId` (`server/routes/orgConfig.js`), admin-only, org-scoped lookup (`User.findOne({_id, orgId})`, never `findById`) returning 404 rather than 403 for a userId outside the caller's org, same as `PATCH .../role`.
+- **Concurrency safety reused, not reinvented** - the deletion path wraps its work in `mongoose.startSession()` + `session.withTransaction()` and, when the target is an admin, uses the identical atomic, guarded `Organisation.findOneAndUpdate({adminCount: {$gt: 1}}, {$inc: -1}, {session})` already proven race-safe for demotion. A `SELF_DELETE` rejection (400) mirrors `SELF_ROLE_CHANGE`, so by the time the admin-count guard runs, caller and target are always distinct - the same reasoning that keeps `LAST_ADMIN` defense-in-depth rather than the primary lockout protection. The exact concurrent-request test shape from the role-change race (`server/tests/orgConfig.test.js`) was re-run against deletion specifically: two admins deleting each other at once resolves to one genuine success and one genuine `LAST_ADMIN`, never zero admins.
+- **Cascade cleanup, since no delete-from-User pattern existed before this** (`orgCascadeService.js`/`supplierCascadeService.js` both cascade downward from Organisation/Supplier, never from a User) - the departing user's own `Conversation` history and `RefreshToken`s are deleted in the same transaction (both are required refs to `User`; a surviving `RefreshToken` would remain usable after the account it belongs to is gone, a real gap, not just tidiness), and `Organisation.owner` is atomically cleared (`$unset`) if the deleted user held it. `AuditLog` rows are deliberately untouched - `Settings.tsx`'s `AuditLogSection` already renders a missing actor as "unknown user", so the audit trail correctly survives past the actor's own deletion.
+- **Frontend** - a "Remove" icon-button in `TeamMembersSection` (`frontend/src/pages/Settings.tsx`), admin-only, same `window.confirm` pattern already used by `SupplierList.tsx`'s delete action, with an inline row error on rejection (e.g. `LAST_ADMIN`) rather than a toast.
+- **Tests** - 11 new backend tests (self-delete, viewer-forbidden, admin-count decrement, stale-counter defense-in-depth, the two-admins-race concurrency test, cross-org 404, Conversation/RefreshToken cascade, owner-clearing, audit-log attribution) and 3 new frontend tests (confirm-then-delete, cancel-keeps-row, rejected-deletion-shows-inline-error). Full suites green: 197 backend tests across 18 files, 99 frontend tests across 12 files.
+
+Full pass/fail verification is the automated suite itself (`server/tests/orgConfig.test.js`'s `DELETE /org/users/:userId` block, `frontend/src/pages/Settings.test.tsx`'s removal tests); the concurrency-safety reasoning is recorded in `TODO.md` §2 alongside the original last-admin write-skew writeup it reuses.
+
+---
+
 # 🎯 Target Release
 
 | Version | Milestone |
