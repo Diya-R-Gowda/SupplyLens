@@ -1,8 +1,11 @@
+const mongoose = require('mongoose');
 const db = require('./db');
 const { app, request, registerUser } = require('./helpers');
 const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
 const Organisation = require('../models/Organisation');
+const Conversation = require('../models/Conversation');
+const RefreshToken = require('../models/RefreshToken');
 
 beforeAll(async () => { await db.connect(); });
 afterEach(async () => { await db.clearDatabase(); });
@@ -469,5 +472,214 @@ describe('PATCH /org/users/:userId/role (role-management: change a member\'s rol
     const entry = await AuditLog.findOne({ orgId: admin.user.orgId, action: 'user.role_updated' });
     expect(entry).not.toBeNull();
     expect(entry.detail).toMatchObject({ email, oldRole: 'viewer', newRole: 'admin' });
+  });
+});
+
+describe('DELETE /org/users/:userId (role-management: remove a member)', () => {
+  const inviteViewer = async (admin, prefix) => {
+    const email = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}@example.com`;
+    await request(app)
+      .post('/api/org/invite-user')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ email, password: 'ViewerPass123!', role: 'viewer' });
+    return { email };
+  };
+
+  const getUserId = async (admin, email) => {
+    const listRes = await request(app).get('/api/org/users').set('Authorization', `Bearer ${admin.accessToken}`);
+    return listRes.body.data.find((u) => u.email === email)._id;
+  };
+
+  test('an admin can delete a viewer', async () => {
+    const admin = await registerUser('deleteViewer');
+    const { email } = await inviteViewer(admin, 'todelete');
+    const userId = await getUserId(admin, email);
+
+    const res = await request(app)
+      .delete(`/api/org/users/${userId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(await User.findById(userId)).toBeNull();
+  });
+
+  test('deleting a viewer does not change Organisation.adminCount', async () => {
+    const admin = await registerUser('deleteViewerCounter');
+    const { email } = await inviteViewer(admin, 'countercheck');
+    const userId = await getUserId(admin, email);
+
+    await request(app).delete(`/api/org/users/${userId}`).set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(await Organisation.findById(admin.user.orgId).then((o) => o.adminCount)).toBe(1);
+  });
+
+  test('a viewer is forbidden from deleting anyone', async () => {
+    const admin = await registerUser('deleteViewerForbidden');
+    const { email } = await inviteViewer(admin, 'target');
+    const userId = await getUserId(admin, email);
+    const login = await request(app).post('/api/auth/login').send({ email, password: 'ViewerPass123!' });
+
+    const res = await request(app)
+      .delete(`/api/org/users/${userId}`)
+      .set('Authorization', `Bearer ${login.body.data.accessToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  test('an admin cannot delete their own account (sidesteps lockout logic entirely)', async () => {
+    const admin = await registerUser('deleteSelf');
+    const selfId = await getUserId(admin, admin.user.email);
+
+    const res = await request(app)
+      .delete(`/api/org/users/${selfId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('SELF_DELETE');
+    expect(await User.findById(selfId)).not.toBeNull();
+  });
+
+  test('deleting a second admin (not the last) decrements Organisation.adminCount', async () => {
+    const admin = await registerUser('deleteSecondAdmin');
+    const { email } = await inviteViewer(admin, 'tobeadmin');
+    const secondUserId = await getUserId(admin, email);
+    await request(app).patch(`/api/org/users/${secondUserId}/role`).set('Authorization', `Bearer ${admin.accessToken}`).send({ role: 'admin' });
+    expect(await Organisation.findById(admin.user.orgId).then((o) => o.adminCount)).toBe(2);
+
+    const res = await request(app)
+      .delete(`/api/org/users/${secondUserId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(await Organisation.findById(admin.user.orgId).then((o) => o.adminCount)).toBe(1);
+  });
+
+  // Same reasoning as PATCH .../role's stale-counter test: with only one
+  // real admin, the caller (always an admin, via requireRole) can only ever
+  // be that admin, and SELF_DELETE fires before LAST_ADMIN could ever be
+  // reached through a normal sequential call. LAST_ADMIN here is the same
+  // defense-in-depth against a desynced counter, exercised directly.
+  test('LAST_ADMIN trusts Organisation.adminCount as the source of truth when deleting an admin', async () => {
+    const admin = await registerUser('deleteStaleCounter');
+    const { email } = await inviteViewer(admin, 'stalecountersecond');
+    const secondUserId = await getUserId(admin, email);
+    await request(app).patch(`/api/org/users/${secondUserId}/role`).set('Authorization', `Bearer ${admin.accessToken}`).send({ role: 'admin' });
+    expect(await User.countDocuments({ orgId: admin.user.orgId, role: 'admin' })).toBe(2);
+
+    await Organisation.updateOne({ _id: admin.user.orgId }, { adminCount: 1 }); // counter says otherwise
+
+    const res = await request(app)
+      .delete(`/api/org/users/${secondUserId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('LAST_ADMIN');
+    expect(await User.findById(secondUserId)).not.toBeNull(); // rejected, not deleted
+  });
+
+  test('two admins racing to delete each other leaves exactly one admin, never zero', async () => {
+    const admin = await registerUser('deleteRaceA');
+    const inviteRes = await request(app)
+      .post('/api/org/invite-user')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ email: `deleteRaceB_${Date.now()}@example.com`, password: 'TestPass123!', role: 'admin' });
+    const emailB = inviteRes.body.data.email;
+    const loginB = await request(app).post('/api/auth/login').send({ email: emailB, password: 'TestPass123!' });
+    const tokenB = loginB.body.data.accessToken;
+
+    const listRes = await request(app).get('/api/org/users').set('Authorization', `Bearer ${admin.accessToken}`);
+    const users = listRes.body.data;
+    const idA = users.find((u) => u.email !== emailB)._id;
+    const idB = users.find((u) => u.email === emailB)._id;
+
+    expect(await User.countDocuments({ orgId: admin.user.orgId, role: 'admin' })).toBe(2);
+
+    // Genuinely concurrent - both requests in flight at once, each trying to
+    // delete the other admin. Reuses the exact atomic-counter guard proven
+    // race-safe for demotion; this confirms it holds for deletion too.
+    const [resAtoB, resBtoA] = await Promise.all([
+      request(app).delete(`/api/org/users/${idB}`).set('Authorization', `Bearer ${admin.accessToken}`),
+      request(app).delete(`/api/org/users/${idA}`).set('Authorization', `Bearer ${tokenB}`),
+    ]);
+
+    const statuses = [resAtoB.status, resBtoA.status].sort();
+    expect(statuses).toEqual([200, 400]);
+    const rejected = resAtoB.status === 400 ? resAtoB : resBtoA;
+    expect(rejected.body.error.code).toBe('LAST_ADMIN');
+
+    const realAdminCount = await User.countDocuments({ orgId: admin.user.orgId, role: 'admin' });
+    const orgAdminCount = await Organisation.findById(admin.user.orgId).then((o) => o.adminCount);
+    expect(realAdminCount).toBe(1);
+    expect(orgAdminCount).toBe(1);
+    expect(orgAdminCount).toBe(realAdminCount);
+  });
+
+  test('a 404, not 403, is returned for a userId outside the caller\'s org', async () => {
+    const orgA = await registerUser('deleteCrossOrgA');
+    const orgB = await registerUser('deleteCrossOrgB');
+    const targetInOrgB = await getUserId(orgB, orgB.user.email);
+
+    const res = await request(app)
+      .delete(`/api/org/users/${targetInOrgB}`)
+      .set('Authorization', `Bearer ${orgA.accessToken}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('USER_NOT_FOUND');
+    expect(await User.findById(targetInOrgB)).not.toBeNull(); // never touched
+  });
+
+  test('deletes the departing user\'s own Conversations and RefreshTokens', async () => {
+    const admin = await registerUser('deleteCascade');
+    const { email } = await inviteViewer(admin, 'cascade');
+    const userId = await getUserId(admin, email);
+
+    await Conversation.create({
+      supplierId: new mongoose.Types.ObjectId(),
+      orgId: admin.user.orgId,
+      userId,
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+    await RefreshToken.create({
+      user: userId,
+      tokenHash: `cascade-test-hash-${Date.now()}`,
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+
+    await request(app).delete(`/api/org/users/${userId}`).set('Authorization', `Bearer ${admin.accessToken}`);
+
+    expect(await Conversation.countDocuments({ userId })).toBe(0);
+    expect(await RefreshToken.countDocuments({ user: userId })).toBe(0);
+  });
+
+  test('clears Organisation.owner if the deleted user held it, without disturbing the remaining admin', async () => {
+    const admin = await registerUser('deleteOwner'); // registerUser's admin is the org owner (auth.js sets org.owner on register)
+    const { email } = await inviteViewer(admin, 'secondadminowner');
+    const secondUserId = await getUserId(admin, email);
+    await request(app).patch(`/api/org/users/${secondUserId}/role`).set('Authorization', `Bearer ${admin.accessToken}`).send({ role: 'admin' });
+    const secondLogin = await request(app).post('/api/auth/login').send({ email, password: 'ViewerPass123!' });
+    const secondToken = secondLogin.body.data.accessToken;
+
+    const ownerId = await getUserId(admin, admin.user.email);
+    expect(await Organisation.findById(admin.user.orgId).then((o) => String(o.owner))).toBe(ownerId);
+
+    const res = await request(app)
+      .delete(`/api/org/users/${ownerId}`)
+      .set('Authorization', `Bearer ${secondToken}`);
+
+    expect(res.status).toBe(200);
+    expect(await Organisation.findById(admin.user.orgId).then((o) => o.owner)).toBeFalsy();
+    expect(await Organisation.findById(admin.user.orgId).then((o) => o.adminCount)).toBe(1);
+  });
+
+  test('a successful deletion records a user.deleted audit log entry', async () => {
+    const admin = await registerUser('deleteAudit');
+    const { email } = await inviteViewer(admin, 'audited');
+    const userId = await getUserId(admin, email);
+
+    await request(app).delete(`/api/org/users/${userId}`).set('Authorization', `Bearer ${admin.accessToken}`);
+
+    const entry = await AuditLog.findOne({ orgId: admin.user.orgId, action: 'user.deleted' });
+    expect(entry).not.toBeNull();
+    expect(entry.detail).toMatchObject({ email, role: 'viewer' });
   });
 });
